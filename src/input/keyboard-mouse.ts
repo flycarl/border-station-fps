@@ -1,0 +1,67 @@
+import { idleCommand, type PlayerCommand } from '../core/types';
+
+export class KeyboardMouseInput {
+  private keys = new Set<string>();
+  private buttons = new Set<number>();
+  private yaw = 0;
+  private pitch = 0;
+
+  private down = (event: KeyboardEvent): void => {
+    this.keys.add(event.code);
+  };
+
+  private up = (event: KeyboardEvent): void => {
+    this.keys.delete(event.code);
+  };
+
+  private mouseDown = (event: MouseEvent): void => {
+    this.buttons.add(event.button);
+  };
+
+  private mouseUp = (event: MouseEvent): void => {
+    this.buttons.delete(event.button);
+  };
+
+  private move = (event: MouseEvent): void => {
+    if (this.doc.pointerLockElement) {
+      this.yaw -= event.movementX * 0.002;
+      this.pitch = Math.max(
+        -1.5,
+        Math.min(1.5, this.pitch - event.movementY * 0.002),
+      );
+    }
+  };
+
+  constructor(private readonly doc: Document) {
+    doc.addEventListener('keydown', this.down);
+    doc.addEventListener('keyup', this.up);
+    doc.addEventListener('mousedown', this.mouseDown);
+    doc.addEventListener('mouseup', this.mouseUp);
+    doc.addEventListener('mousemove', this.move);
+  }
+
+  sample(): PlayerCommand {
+    const command = idleCommand();
+    command.moveX =
+      Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA'));
+    command.moveZ =
+      Number(this.keys.has('KeyS')) - Number(this.keys.has('KeyW'));
+    command.yaw = this.yaw;
+    command.pitch = this.pitch;
+    command.jump = this.keys.has('Space');
+    command.crouch = this.keys.has('ControlLeft');
+    command.walk = this.keys.has('ShiftLeft');
+    command.fire = this.buttons.has(0);
+    command.reload = this.keys.has('KeyR');
+    command.interact = this.keys.has('KeyE');
+    return command;
+  }
+
+  dispose(): void {
+    this.doc.removeEventListener('keydown', this.down);
+    this.doc.removeEventListener('keyup', this.up);
+    this.doc.removeEventListener('mousedown', this.mouseDown);
+    this.doc.removeEventListener('mouseup', this.mouseUp);
+    this.doc.removeEventListener('mousemove', this.move);
+  }
+}
