@@ -19,6 +19,9 @@ export function computeWishVelocity(
 }
 
 export class PlayerController {
+  private jumpConsumed = false;
+  private leftSupportAfterJump = false;
+
   constructor(private readonly body: RAPIER.RigidBody) {}
 
   update(command: PlayerCommand, dt: number, grounded: boolean): void {
@@ -30,11 +33,18 @@ export class PlayerController {
       speed,
     );
     const current = this.body.linvel();
+    if (!grounded && this.jumpConsumed) this.leftSupportAfterJump = true;
+    if (grounded && this.leftSupportAfterJump) {
+      this.jumpConsumed = false;
+      this.leftSupportAfterJump = false;
+    }
+    const shouldJump = grounded && command.jump && !this.jumpConsumed;
+    if (shouldJump) this.jumpConsumed = true;
 
     this.body.setLinvel(
       {
         x: wish.x,
-        y: grounded && command.jump ? 5.2 : current.y,
+        y: shouldJump ? 5.2 : current.y,
         z: wish.z,
       },
       true,

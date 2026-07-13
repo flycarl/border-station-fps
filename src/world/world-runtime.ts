@@ -65,6 +65,7 @@ export class WorldRuntime {
   private readonly disposableMaterials: THREE.Material[] = [];
   private readonly playerBodies = new Map<EntityId, RAPIER.RigidBody>();
   private readonly playerMeshes = new Map<EntityId, THREE.Mesh>();
+  private readonly supportColliderHandles = new Set<number>();
   private disposed = false;
 
   private constructor(
@@ -100,9 +101,11 @@ export class WorldRuntime {
     return runtime;
   }
 
-  static async createHeadless(): Promise<WorldRuntime> {
+  static async createHeadless(withGraybox = false): Promise<WorldRuntime> {
     await initializeRapier();
-    return new WorldRuntime(null, null, null, null, new RAPIER.World({ x: 0, y: -9.81, z: 0 }));
+    const runtime = new WorldRuntime(null, null, null, null, new RAPIER.World({ x: 0, y: -9.81, z: 0 }));
+    if (withGraybox) runtime.buildGraybox();
+    return runtime;
   }
 
   spawnPlayer(position: Vec3, entityId: EntityId): RAPIER.RigidBody {
@@ -195,6 +198,22 @@ export class WorldRuntime {
     };
   }
 
+  isPlayerSupported(entityId: EntityId): boolean {
+    const body = this.playerBodies.get(entityId);
+    if (!body) return false;
+    const hit = this.physicsWorld.castRayAndGetNormal(
+      new RAPIER.Ray(body.translation(), { x: 0, y: -1, z: 0 }),
+      PLAYER_HALF_HEIGHT + PLAYER_RADIUS + 0.08,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      body,
+      (collider) => this.supportColliderHandles.has(collider.handle),
+    );
+    return hit !== null && hit.normal.y >= 0.65;
+  }
+
   render(cameraPose: CameraPose): void {
     if (!this.camera || !this.renderer || !this.scene) return;
     for (const [entityId, mesh] of this.playerMeshes) {
@@ -251,19 +270,12 @@ export class WorldRuntime {
   };
 
   private buildGraybox(): void {
-    if (!this.scene) return;
     const map = createBorderStationGraybox();
     for (const solid of map.solids) {
-      const geometry = new THREE.BoxGeometry(solid.size.x, solid.size.y, solid.size.z);
-      const material = new THREE.MeshStandardMaterial({ color: colorForSolid(solid) });
-      const mesh = new THREE.Mesh(geometry, material);
       const pitch = solid.kind === 'ramp' ? BORDER_STATION_RAMP_PITCH : 0;
-      mesh.position.set(solid.center.x, solid.center.y, solid.center.z);
-      mesh.rotation.set(pitch, solid.yaw, 0, 'YXZ');
-      mesh.receiveShadow = true;
-      this.scene.add(mesh);
-
-      const rotation = new THREE.Quaternion().setFromEuler(mesh.rotation);
+      const rotation = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(pitch, solid.yaw, 0, 'YXZ'),
+      );
       const colliderDesc = RAPIER.ColliderDesc.cuboid(
         solid.size.x / 2,
         solid.size.y / 2,
@@ -273,9 +285,21 @@ export class WorldRuntime {
         .setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w });
       const collider = this.physicsWorld.createCollider(colliderDesc);
       this.colliderEntityIds.set(collider.handle, solid.id);
+      if (solid.kind === 'floor' || solid.kind === 'ramp') {
+        this.supportColliderHandles.add(collider.handle);
+      }
 
-      this.disposableGeometries.push(geometry);
-      this.disposableMaterials.push(material);
+      if (this.scene) {
+        const geometry = new THREE.BoxGeometry(solid.size.x, solid.size.y, solid.size.z);
+        const material = new THREE.MeshStandardMaterial({ color: colorForSolid(solid) });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(solid.center.x, solid.center.y, solid.center.z);
+        mesh.rotation.set(pitch, solid.yaw, 0, 'YXZ');
+        mesh.receiveShadow = true;
+        this.scene.add(mesh);
+        this.disposableGeometries.push(geometry);
+        this.disposableMaterials.push(material);
+      }
     }
   }
 

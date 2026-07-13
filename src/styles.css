@@ -52,6 +52,7 @@ button { pointer-events: auto; font: inherit; }
 }
 .hud__reticle { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); }
 .hud__reticle::before, .hud__reticle::after { content: ""; position: absolute; background: rgb(238 244 242 / 82%); box-shadow: 0 0 2px #000; }
+.hud__announcer { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .hud__reticle::before { left: 7px; top: 1px; width: 2px; height: 14px; }
 .hud__reticle::after { left: 1px; top: 7px; width: 14px; height: 2px; }
 

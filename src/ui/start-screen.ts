@@ -3,6 +3,7 @@ export class StartScreen {
   private readonly title: HTMLElement;
   private readonly description: HTMLElement;
   private readonly actions: HTMLElement;
+  private readonly status: HTMLElement;
   private mode: 'start' | 'pause' | 'hidden' = 'start';
 
   constructor(
@@ -21,12 +22,14 @@ export class StartScreen {
         <h1 id="mission-title"></h1>
         <p class="mission-modal__description"></p>
         <p class="mission-modal__controls">WASD / 鼠标 / E / R</p>
+        <p class="mission-modal__status" role="status" aria-live="polite"></p>
         <div class="mission-modal__actions"></div>
       </div>
     `;
     this.title = this.require('#mission-title');
     this.description = this.require('.mission-modal__description');
     this.actions = this.require('.mission-modal__actions');
+    this.status = this.require('.mission-modal__status');
     root.append(this.element);
     this.render();
   }
@@ -34,6 +37,10 @@ export class StartScreen {
   setPaused(paused: boolean): void {
     this.mode = paused ? 'pause' : 'hidden';
     this.render();
+  }
+
+  setLockError(message: string): void {
+    this.status.textContent = message;
   }
 
   dispose(): void {
@@ -50,7 +57,6 @@ export class StartScreen {
       this.description.textContent = '带领攻方突入站区，消灭守军或安装炸弹。';
       this.actions.append(this.button('开始任务', 'primary', () => {
         this.onStart();
-        this.setPaused(false);
       }));
       return;
     }
@@ -60,7 +66,6 @@ export class StartScreen {
     this.actions.append(
       this.button('继续', 'primary', () => {
         this.onStart();
-        this.setPaused(false);
       }),
       this.button('重新开始', 'secondary', () => this.onRestart()),
     );

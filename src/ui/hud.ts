@@ -25,6 +25,17 @@ function objectivePrompt(snapshot: HudSnapshot): string {
   return '';
 }
 
+function statusAnnouncement(snapshot: HudSnapshot): string {
+  if (snapshot.bombState === 'planted') return '炸弹已安装';
+  if (snapshot.bombState === 'defused') return '炸弹已拆除';
+  if (snapshot.bombState === 'exploded') return '炸弹已爆炸';
+  if (snapshot.bombState === 'dropped') return '炸弹已掉落';
+  if (snapshot.phase === 'result') return '回合结束';
+  if (snapshot.phase === 'match-over') return '比赛结束';
+  if (snapshot.phase === 'live') return '回合开始';
+  return '';
+}
+
 export class Hud {
   private readonly element: HTMLElement;
   private readonly score: HTMLElement;
@@ -36,11 +47,12 @@ export class Hud {
   private readonly weapon: HTMLElement;
   private readonly ammo: HTMLElement;
   private readonly objective: HTMLElement;
+  private readonly announcer: HTMLElement;
+  private lastStatusKey = '';
 
   constructor(private readonly root: HTMLElement) {
     this.element = document.createElement('div');
     this.element.className = 'hud';
-    this.element.setAttribute('aria-live', 'polite');
     this.element.innerHTML = `
       <section class="hud__round" aria-label="比赛状态">
         <div class="hud__phase"></div>
@@ -58,6 +70,7 @@ export class Hud {
         <strong class="hud__ammo"></strong>
       </section>
       <div class="hud__objective" data-testid="bomb-action"></div>
+      <div class="hud__announcer" role="status" aria-live="polite"></div>
       <div class="hud__reticle" aria-hidden="true"></div>
     `;
     this.score = this.require('.hud__score');
@@ -69,6 +82,7 @@ export class Hud {
     this.weapon = this.require('.hud__weapon-name');
     this.ammo = this.require('.hud__ammo');
     this.objective = this.require('.hud__objective');
+    this.announcer = this.require('.hud__announcer');
     root.append(this.element);
   }
 
@@ -83,6 +97,12 @@ export class Hud {
     this.ammo.textContent = `${snapshot.magazine} / ${snapshot.reserve}`;
     this.objective.textContent = objectivePrompt(snapshot);
     this.objective.hidden = this.objective.textContent === '';
+    const statusKey = `${snapshot.phase}:${snapshot.bombState}`;
+    if (statusKey !== this.lastStatusKey) {
+      this.lastStatusKey = statusKey;
+      const announcement = statusAnnouncement(snapshot);
+      if (announcement) this.announcer.textContent = announcement;
+    }
   }
 
   dispose(): void {

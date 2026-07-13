@@ -87,9 +87,20 @@ interface GameDiagnostics {
   restart(): void;
 }
 
+interface GameQaDriver {
+  readonly state: GameSnapshot;
+  readonly bomb: ReturnType<BombSystem['snapshot']>;
+  advance(ticks: number): void;
+  command(actorId: EntityId, command: Partial<PlayerCommand>): void;
+  clearCommands(): void;
+  place(actorId: EntityId, position: Vec3): void;
+  restart(): void;
+}
+
 declare global {
   interface Window {
     __THREE_GAME_DIAGNOSTICS__?: GameDiagnostics;
+    __THREE_GAME_QA__?: GameQaDriver;
   }
 }
 
@@ -128,6 +139,7 @@ export class Game {
   private paused = true;
   private hasEntered = false;
   private disposed = false;
+  private qaCommands: Map<EntityId, PlayerCommand> | null = null;
 
   private constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -149,6 +161,7 @@ export class Game {
     document.addEventListener('pointerlockchange', this.pointerLockChange);
     document.addEventListener('keydown', this.keyDown);
     this.installDiagnostics();
+    this.installQaDriver();
   }
 
   static async create(canvas: HTMLCanvasElement, uiRoot: HTMLElement): Promise<Game> {
@@ -201,6 +214,7 @@ export class Game {
     this.actors.clear();
     this.world.dispose();
     delete window.__THREE_GAME_DIAGNOSTICS__;
+    delete window.__THREE_GAME_QA__;
     this.uiRoot.replaceChildren();
   }
 
@@ -242,13 +256,19 @@ export class Game {
   private updatePerception(): void {
     for (const actor of this.actors.values()) {
       const translation = actor.body.translation();
-      const velocity = actor.body.linvel();
       actor.state.position = { x: translation.x, y: translation.y, z: translation.z };
-      actor.state.grounded = Math.abs(velocity.y) < 0.12;
+      actor.state.grounded = this.world.isPlayerSupported(actor.state.id);
     }
   }
 
   private sampleCommands(dt: number): void {
+    if (this.qaCommands) {
+      this.commands = new Map(this.roster.map(({ id }) => [
+        id,
+        { ...(this.qaCommands?.get(id) ?? idleCommand()) },
+      ]));
+      return;
+    }
     const phase = this.match.snapshot().phase;
     const active = phase === 'live' || phase === 'planted';
     const human = this.actors.get('attack-human');
@@ -401,12 +421,15 @@ export class Game {
   private readonly resumeFromGesture = (): void => {
     if (this.disposed) return;
     this.hasEntered = true;
-    this.paused = false;
-    this.startScreen.setPaused(false);
-    void this.canvas.requestPointerLock().catch(() => {
-      // Keyboard play and automated QA remain available when a browser denies lock.
-      // A granted lock that is later lost is handled by pointerLockChange.
-    });
+    this.paused = true;
+    this.startScreen.setLockError('');
+    try {
+      void this.canvas.requestPointerLock().catch(() => {
+        this.pause('无法锁定鼠标，请重试。');
+      });
+    } catch {
+      this.pause('无法锁定鼠标，请重试。');
+    }
   };
 
   private readonly restartFromGesture = (): void => {
@@ -417,6 +440,8 @@ export class Game {
   private readonly pointerLockChange = (): void => {
     if (document.pointerLockElement === this.canvas) {
       this.paused = false;
+      this.lastFrameTime = null;
+      this.startScreen.setLockError('');
       this.startScreen.setPaused(false);
     } else if (this.hasEntered) {
       this.pause();
@@ -428,10 +453,11 @@ export class Game {
     this.pause();
   };
 
-  private pause(): void {
+  private pause(message = ''): void {
     this.paused = true;
     this.lastFrameTime = null;
     this.startScreen.setPaused(true);
+    if (message) this.startScreen.setLockError(message);
   }
 
   private installDiagnostics(): void {
@@ -457,6 +483,42 @@ export class Game {
       },
       restart() {
         game.restart();
+      },
+    };
+  }
+
+  private installQaDriver(): void {
+    if (new URLSearchParams(window.location.search).get('qa') !== '1') return;
+    const game = this;
+    this.qaCommands = new Map();
+    window.__THREE_GAME_QA__ = {
+      get state() {
+        return game.snapshot();
+      },
+      get bomb() {
+        return game.bomb.snapshot();
+      },
+      advance(ticks) {
+        const count = Math.max(0, Math.min(20_000, Math.floor(ticks)));
+        for (let tick = 0; tick < count; tick++) game.fixedUpdate(FIXED_STEP);
+        game.renderFrame();
+      },
+      command(actorId, command) {
+        if (!game.actors.has(actorId)) throw new Error(`Unknown QA actor: ${actorId}`);
+        game.qaCommands?.set(actorId, { ...idleCommand(), ...command });
+      },
+      clearCommands() {
+        game.qaCommands?.clear();
+      },
+      place(actorId, position) {
+        const actor = game.actors.get(actorId);
+        if (!actor) throw new Error(`Unknown QA actor: ${actorId}`);
+        actor.body.setTranslation(position, true);
+        actor.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      },
+      restart() {
+        game.restart();
+        game.qaCommands = new Map();
       },
     };
   }
