@@ -27,14 +27,14 @@ export class KeyboardMouseInput {
     this.buttons.delete(event.button);
   };
 
-  private resetHeldControls = (): void => {
+  resetHeldState = (): void => {
     this.keys.clear();
     this.buttons.clear();
   };
 
   private visibilityChange = (): void => {
     if (this.doc.visibilityState === 'hidden') {
-      this.resetHeldControls();
+      this.resetHeldState();
     }
   };
 
@@ -54,7 +54,7 @@ export class KeyboardMouseInput {
     doc.addEventListener('mousedown', this.mouseDown);
     doc.addEventListener('mouseup', this.mouseUp);
     doc.addEventListener('mousemove', this.move);
-    doc.defaultView?.addEventListener('blur', this.resetHeldControls);
+    doc.defaultView?.addEventListener('blur', this.resetHeldState);
     doc.addEventListener('visibilitychange', this.visibilityChange);
   }
 
@@ -82,7 +82,7 @@ export class KeyboardMouseInput {
     this.doc.removeEventListener('mousedown', this.mouseDown);
     this.doc.removeEventListener('mouseup', this.mouseUp);
     this.doc.removeEventListener('mousemove', this.move);
-    this.doc.defaultView?.removeEventListener('blur', this.resetHeldControls);
+    this.doc.defaultView?.removeEventListener('blur', this.resetHeldState);
     this.doc.removeEventListener('visibilitychange', this.visibilityChange);
   }
 }

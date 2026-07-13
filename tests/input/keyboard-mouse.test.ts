@@ -26,6 +26,18 @@ it('clears held controls when the window loses focus', () => {
   input.dispose();
 });
 
+it('exposes held-state reset for pause and pointer-lock loss', () => {
+  const input = new KeyboardMouseInput(document);
+  document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+  document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyR' }));
+  document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
+
+  input.resetHeldState();
+
+  expect(input.sample()).toMatchObject({ moveZ: 0, reload: false, fire: false });
+  input.dispose();
+});
+
 it('maps number keys to rifle and pistol command slots', () => {
   const input = new KeyboardMouseInput(document);
 

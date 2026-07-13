@@ -19,6 +19,12 @@ export interface RayHit {
   point: Vec3;
 }
 
+export interface PlayerWorldStatus {
+  active: boolean;
+  raycastRegistered: boolean;
+  meshVisible: boolean;
+}
+
 export interface WorldDiagnostics {
   engine: 'rapier';
   timestep: number;
@@ -40,6 +46,8 @@ const MAX_DEVICE_PIXEL_RATIO = 2;
 const PLAYER_HALF_HEIGHT = 0.5;
 const PLAYER_RADIUS = 0.35;
 const PLAYER_LINEAR_DAMPING = 0.8;
+const ACTIVE_COLLISION_GROUPS = 0xffffffff;
+const INACTIVE_COLLISION_GROUPS = 0;
 
 let rapierInitialization: Promise<void> | null = null;
 
@@ -64,6 +72,7 @@ export class WorldRuntime {
   private readonly disposableGeometries: THREE.BufferGeometry[] = [];
   private readonly disposableMaterials: THREE.Material[] = [];
   private readonly playerBodies = new Map<EntityId, RAPIER.RigidBody>();
+  private readonly inactivePlayers = new Set<EntityId>();
   private readonly playerMeshes = new Map<EntityId, THREE.Mesh>();
   private readonly supportColliderHandles = new Set<number>();
   private disposed = false;
@@ -121,6 +130,7 @@ export class WorldRuntime {
     const collider = this.physicsWorld.createCollider(colliderDesc, body);
     this.colliderEntityIds.set(collider.handle, entityId);
     this.playerBodies.set(entityId, body);
+    this.inactivePlayers.delete(entityId);
 
     if (this.scene) {
       const geometry = new THREE.CapsuleGeometry(PLAYER_RADIUS, PLAYER_HALF_HEIGHT * 2, 4, 8);
@@ -146,6 +156,7 @@ export class WorldRuntime {
     }
     this.physicsWorld.removeRigidBody(body);
     this.playerBodies.delete(entityId);
+    this.inactivePlayers.delete(entityId);
     const mesh = this.playerMeshes.get(entityId);
     if (mesh) {
       mesh.removeFromParent();
@@ -154,6 +165,44 @@ export class WorldRuntime {
       for (const material of materials) material.dispose();
     }
     this.playerMeshes.delete(entityId);
+  }
+
+  setPlayerActive(entityId: EntityId, active: boolean): void {
+    const body = this.playerBodies.get(entityId);
+    if (!body) return;
+    if (active === !this.inactivePlayers.has(entityId)) return;
+    if (active) this.inactivePlayers.delete(entityId);
+    else this.inactivePlayers.add(entityId);
+    body.setBodyType(
+      active ? RAPIER.RigidBodyType.Dynamic : RAPIER.RigidBodyType.Fixed,
+      true,
+    );
+    for (let index = 0; index < body.numColliders(); index++) {
+      const collider = body.collider(index);
+      collider.setCollisionGroups(
+        active ? ACTIVE_COLLISION_GROUPS : INACTIVE_COLLISION_GROUPS,
+      );
+      if (active) this.colliderEntityIds.set(collider.handle, entityId);
+      else this.colliderEntityIds.delete(collider.handle);
+    }
+    const mesh = this.playerMeshes.get(entityId);
+    if (mesh) mesh.visible = active && entityId !== 'attack-human';
+  }
+
+  playerStatus(entityId: EntityId): PlayerWorldStatus | null {
+    const body = this.playerBodies.get(entityId);
+    if (!body) return null;
+    let raycastRegistered = body.numColliders() > 0;
+    for (let index = 0; index < body.numColliders(); index++) {
+      if (this.colliderEntityIds.get(body.collider(index).handle) !== entityId) {
+        raycastRegistered = false;
+      }
+    }
+    return {
+      active: !this.inactivePlayers.has(entityId),
+      raycastRegistered,
+      meshVisible: this.playerMeshes.get(entityId)?.visible ?? false,
+    };
   }
 
   step(dt: number): void {
@@ -184,9 +233,10 @@ export class WorldRuntime {
       undefined,
       undefined,
       undefined,
-      excludeEntityId === undefined
-        ? undefined
-        : (collider) => this.colliderEntityIds.get(collider.handle) !== excludeEntityId,
+      (collider) => {
+        const entityId = this.colliderEntityIds.get(collider.handle);
+        return entityId !== undefined && entityId !== excludeEntityId;
+      },
     );
     if (!hit) return null;
 
@@ -200,7 +250,7 @@ export class WorldRuntime {
 
   isPlayerSupported(entityId: EntityId): boolean {
     const body = this.playerBodies.get(entityId);
-    if (!body) return false;
+    if (!body || this.inactivePlayers.has(entityId)) return false;
     const hit = this.physicsWorld.castRayAndGetNormal(
       new RAPIER.Ray(body.translation(), { x: 0, y: -1, z: 0 }),
       PLAYER_HALF_HEIGHT + PLAYER_RADIUS + 0.08,

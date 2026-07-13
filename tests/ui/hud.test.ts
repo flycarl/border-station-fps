@@ -61,5 +61,9 @@ it('keeps timer and ammo renders out of the live announcer and announces objecti
   await Promise.resolve();
   expect(announcer?.textContent).toBe('炸弹已安装');
   expect(mutations).toHaveLength(1);
+  hud.render({ ...base, phase: 'freeze', bombState: 'carried' });
+  await Promise.resolve();
+  expect(announcer?.textContent).toBe('');
+  expect(mutations).toHaveLength(2);
   observer.disconnect();
 });

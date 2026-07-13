@@ -20,7 +20,11 @@ import { StartScreen } from './ui/start-screen';
 import { WEAPONS } from './weapons/weapon-data';
 import { WeaponSystem } from './weapons/weapon-system';
 import { createBorderStationGraybox } from './world/border-station-graybox';
-import { WorldRuntime, type WorldDiagnostics } from './world/world-runtime';
+import {
+  WorldRuntime,
+  type PlayerWorldStatus,
+  type WorldDiagnostics,
+} from './world/world-runtime';
 
 const FIXED_STEP = 1 / 60;
 const EYE_HEIGHT = 0.65;
@@ -94,6 +98,9 @@ interface GameQaDriver {
   command(actorId: EntityId, command: Partial<PlayerCommand>): void;
   clearCommands(): void;
   place(actorId: EntityId, position: Vec3): void;
+  actorWorldStatus(actorId: EntityId): PlayerWorldStatus | null;
+  canActorsSee(fromActorId: EntityId, toActorId: EntityId): boolean;
+  isActorSupported(actorId: EntityId): boolean;
   restart(): void;
 }
 
@@ -299,7 +306,6 @@ export class Game {
       actor.state.yaw = command.yaw;
       actor.state.pitch = command.pitch;
       if (actor.state.alive) actor.controller.update(command, dt, actor.state.grounded);
-      else actor.body.setLinvel({ x: 0, y: actor.body.linvel().y, z: 0 }, true);
     }
   }
 
@@ -309,6 +315,15 @@ export class Game {
       this.weaponSystem.update(actor.state.id, command, {
         origin: this.eyePosition(actor.state.position),
       }, dt);
+    }
+    this.reconcileActorParticipation();
+  }
+
+  private reconcileActorParticipation(): void {
+    for (const { state } of this.actors.values()) {
+      if (this.world.playerStatus(state.id)?.active !== state.alive) {
+        this.world.setPlayerActive(state.id, state.alive);
+      }
     }
   }
 
@@ -456,6 +471,7 @@ export class Game {
   private pause(message = ''): void {
     this.paused = true;
     this.lastFrameTime = null;
+    this.input.resetHeldState();
     this.startScreen.setPaused(true);
     if (message) this.startScreen.setLockError(message);
   }
@@ -515,6 +531,17 @@ export class Game {
         if (!actor) throw new Error(`Unknown QA actor: ${actorId}`);
         actor.body.setTranslation(position, true);
         actor.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      },
+      actorWorldStatus(actorId) {
+        return game.world.playerStatus(actorId);
+      },
+      canActorsSee(fromActorId, toActorId) {
+        const from = game.actors.get(fromActorId)?.state.position;
+        const to = game.actors.get(toActorId)?.state.position;
+        return from !== undefined && to !== undefined && game.canSee(from, to);
+      },
+      isActorSupported(actorId) {
+        return game.world.isPlayerSupported(actorId);
       },
       restart() {
         game.restart();

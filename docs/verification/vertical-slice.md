@@ -28,7 +28,7 @@ Superseded initial implementation RED evidence (retained as history):
 - `npm run test:e2e`: after Chromium installation, failed because `开始任务` was absent.
 - Restart regression: the extended browser test failed with renderer geometries increasing from 10 to 14 while bodies/colliders stayed 6/12. Actor meshes now dispose geometry/material resources in `WorldRuntime.removePlayer`.
 
-Final fresh verification: `npm test -- --run && npm run typecheck && npm run build && npm run test:e2e && git diff --check` passed with 15 Vitest files / 74 tests, TypeScript no-emit, Vite production build, 7 Playwright Chromium tests in 8.6 seconds, and a clean diff check. The Playwright total comprises six production game scenarios plus the focused injected-page-error audit regression. Built JS: 2,790.87 kB / 984.97 kB gzip (size warning only).
+Final fresh verification: `npm test -- --run && npm run typecheck && npm run build && npm run test:e2e && git diff --check` passed with 15 Vitest files / 76 tests, TypeScript no-emit, Vite production build, 8 Playwright Chromium tests in 8.5 seconds, and a clean diff check. The Playwright total comprises seven production game scenarios plus the focused injected-page-error audit regression. Built JS: 2,792.18 kB / 985.32 kB gzip (size warning only).
 
 Review RED evidence:
 
@@ -38,6 +38,10 @@ Review RED evidence:
 - First Chromium retry: rejected pointer lock kept the game paused correctly, but the status locator was ambiguous; this was narrowed to the modal status.
 - First composed defuse retry stayed `planted`: placing the defender inside the live planter collider let Rapier separate it from the objective. The deterministic setup now moves the planter away, then places the defender at the real bomb snapshot position.
 - Browser-audit regression initially stopped the preview build because `installBrowserAudit` did not exist; after the shared listener was added, an injected `audit sentinel` page error was collected and the production-preview clean audit asserted an empty page-error list.
+- Death-participation unit regression failed because `setPlayerActive`/`playerStatus` did not exist. The production fix changes a dead actor to a fixed body with zero collision groups, unregisters its collider from ray queries, and hides its mesh.
+- The first composed death retry retained the corpse collider strongly enough for traversal to push its body from `z = 7` to `z = 4.708`; the fixed collision-group transition and removal of post-death velocity writes now preserve the authoritative death position.
+- Input reset regression failed with `resetHeldState is not a function`; the public reset now clears keyboard and mouse-held state and is invoked by the central pause path used by Escape, pointer-lock loss, and lock rejection.
+- HUD clearing regression retained `炸弹已安装` after the computed announcement became empty; every status-key transition now assigns the computed string, including `''`.
 
 ## Production browser evidence
 
@@ -89,6 +93,7 @@ Focused browser scenarios proved:
 - plant: human placed in the real site and held `interact` until `BombSystem` produced `planted`;
 - defuse: planter moved clear, kit defender placed at the bomb snapshot and held `interact` until defense scored;
 - elimination: human rifle commands fired through `WeaponSystem` and real Rapier raycasts until all defenders were eliminated and attack scored;
+- death reconciliation: four real rifle shots killed the front defender; its body became fixed/non-interacting, its ray registration and mesh visibility turned off, a fifth shot damaged the living defender behind it, bot traversal crossed its death position, LOS stayed clear, support returned false, and restart restored active body/collider/raycast/mesh state without resource growth;
 - timeout: idle fixed ticks exhausted the real live timer and defense scored;
 - transition/retry: result advanced to round 2 freeze, then normal restart restored round 1 and 0–0;
 - pointer lock: a confirmed `pointerlockchange` resumed play; rejected `requestPointerLock` kept the overlay visible/paused and announced an accessible error.
@@ -114,6 +119,7 @@ This is automated, deterministic production-preview QA, not a claim of full manu
 - Ground support: floor/ramp pass; apex with near-zero vertical velocity fails support; the actor's collider is explicitly excluded and wall/cover colliders are filtered out.
 - Live regions: normal timer/ammo rewrites produce zero announcer mutations; an objective transition announces exactly once.
 - Restart cleanup: pass in unit and browser regression checks.
+- Death cleanup: pass; dead actors retain snapshot position/state but cannot collide, support, intercept LOS/rays, absorb later shots, or render, and round/match restart recreates all six active actors.
 - Production build/base path/assets: pass at root-host preview; no external assets or licenses were added.
 
 ## Residual risks

@@ -163,3 +163,76 @@ test('composed WeaponSystem elimination awards attack', async ({ page }) => {
   expect(state).toMatchObject({ phase: 'result', attackScore: 1 });
   expect(state.actors.filter((actor) => actor.team === 'defense' && actor.alive)).toHaveLength(0);
 });
+
+test('death reconciliation clears combat, navigation, support, and render participation until restart', async ({ page }) => {
+  await page.goto('/?qa=1&debug=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  const result = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const fire = (shots: number): void => {
+      for (let shot = 0; shot < shots; shot++) {
+        qa.command('attack-human', { fire: true, slot: 1, yaw: 0, pitch: 0 });
+        qa.advance(1);
+        qa.command('attack-human', { fire: false, slot: 1, yaw: 0, pitch: 0 });
+        qa.advance(7);
+      }
+    };
+
+    qa.advance(721);
+    qa.place('attack-human', { x: 8, y: 1, z: 10 });
+    qa.place('attack-bot-1', { x: -8, y: 1, z: 20 });
+    qa.place('attack-bot-2', { x: -7, y: 1, z: 20 });
+    qa.place('defense-bot-1', { x: 8, y: 1, z: 7 });
+    qa.place('defense-bot-2', { x: 8, y: 1, z: 4 });
+    qa.place('defense-bot-3', { x: -8, y: 1, z: -20 });
+    fire(4);
+    const deathPosition = qa.state.actors.find(({ id }) => id === 'defense-bot-1')!.position;
+    const deadWorld = qa.actorWorldStatus('defense-bot-1');
+    const targetBefore = qa.state.actors.find(({ id }) => id === 'defense-bot-2')!.health;
+    fire(1);
+    const targetAfter = qa.state.actors.find(({ id }) => id === 'defense-bot-2')!.health;
+    const visibleThroughDeath = qa.canActorsSee('attack-human', 'defense-bot-2');
+    const deadSupported = qa.isActorSupported('defense-bot-1');
+
+    qa.place('attack-human', { x: -8, y: 1, z: 20 });
+    qa.place('defense-bot-2', { x: -7, y: 1, z: -20 });
+    qa.place('attack-bot-1', { x: 8, y: 1, z: 9 });
+    qa.command('attack-bot-1', { moveZ: -1, yaw: 0 });
+    qa.advance(60);
+    const navigatorZ = qa.state.actors.find(({ id }) => id === 'attack-bot-1')!.position.z;
+    const retainedDeathPosition = qa.state.actors.find(({ id }) => id === 'defense-bot-1')!.position;
+    const resourcesWhileDead = window.__THREE_GAME_DIAGNOSTICS__!.physics;
+    const rendererWhileDead = window.__THREE_GAME_DIAGNOSTICS__!.renderer;
+
+    qa.restart();
+    qa.advance(0);
+    return {
+      deadWorld,
+      targetBefore,
+      targetAfter,
+      visibleThroughDeath,
+      deadSupported,
+      navigatorZ,
+      deathPosition,
+      retainedDeathPosition,
+      resourcesWhileDead,
+      rendererWhileDead,
+      restartedWorld: qa.actorWorldStatus('defense-bot-1'),
+      restartedState: qa.state,
+      restartedResources: window.__THREE_GAME_DIAGNOSTICS__!.physics,
+      restartedRenderer: window.__THREE_GAME_DIAGNOSTICS__!.renderer,
+    };
+  });
+
+  expect(result.deadWorld).toMatchObject({ active: false, raycastRegistered: false, meshVisible: false });
+  expect(result.targetAfter).toBeLessThan(result.targetBefore);
+  expect(result.visibleThroughDeath).toBe(true);
+  expect(result.deadSupported).toBe(false);
+  expect(result.navigatorZ).toBeLessThan(6);
+  expect(result.retainedDeathPosition).toEqual(result.deathPosition);
+  expect(result.resourcesWhileDead).toMatchObject({ bodies: 6, colliders: 12 });
+  expect(result.restartedWorld).toMatchObject({ active: true, raycastRegistered: true, meshVisible: true });
+  expect(result.restartedState).toMatchObject({ round: 1, attackScore: 0, defenseScore: 0 });
+  expect(result.restartedResources).toMatchObject({ bodies: 6, colliders: 12 });
+  expect(result.restartedRenderer.geometries).toBeLessThanOrEqual(result.rendererWhileDead.geometries);
+});

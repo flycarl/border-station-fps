@@ -101,7 +101,7 @@ export class Hud {
     if (statusKey !== this.lastStatusKey) {
       this.lastStatusKey = statusKey;
       const announcement = statusAnnouncement(snapshot);
-      if (announcement) this.announcer.textContent = announcement;
+      this.announcer.textContent = announcement;
     }
   }
 

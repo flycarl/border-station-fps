@@ -65,6 +65,53 @@ it('can exclude the firing actor and return the real target actor ID', async () 
   }
 });
 
+it('disables a dead actor without removing its authoritative body or collider resources', async () => {
+  const runtime = await WorldRuntime.createHeadless();
+
+  try {
+    const deadBody = runtime.spawnPlayer({ x: 8, y: 0, z: 8 }, 'dead-actor');
+    const targetBody = runtime.spawnPlayer({ x: 8, y: 0, z: 4 }, 'living-target');
+    runtime.step(1 / 60);
+    const before = runtime.diagnostics();
+
+    runtime.setPlayerActive('dead-actor', false);
+
+    expect(runtime.playerStatus('dead-actor')).toMatchObject({
+      active: false,
+      raycastRegistered: false,
+      meshVisible: false,
+    });
+    expect(runtime.diagnostics()).toMatchObject(before);
+    expect(runtime.isPlayerSupported('dead-actor')).toBe(false);
+    expect(runtime.raycast(
+      { x: 8, y: 0.65, z: 10 },
+      { x: 0, y: 0, z: -1 },
+      10,
+    )?.entityId).toBe('living-target');
+
+    const deathPosition = { ...deadBody.translation() };
+    targetBody.setTranslation({ x: 12, y: 0, z: 4 }, true);
+    const navigator = runtime.spawnPlayer({ x: 8, y: 0, z: 10 }, 'navigator');
+    navigator.setLinvel({ x: 0, y: 0, z: -6 }, true);
+    for (let step = 0; step < 60; step++) runtime.step(1 / 60);
+    expect(navigator.translation().z).toBeLessThan(6);
+    expect(deadBody.translation()).toMatchObject(deathPosition);
+
+    runtime.setPlayerActive('dead-actor', true);
+    expect(runtime.playerStatus('dead-actor')).toMatchObject({
+      active: true,
+      raycastRegistered: true,
+    });
+    expect(runtime.raycast(
+      { x: 8, y: 0.65, z: 10 },
+      { x: 0, y: 0, z: -1 },
+      10,
+    )?.entityId).toBe('dead-actor');
+  } finally {
+    runtime.dispose();
+  }
+});
+
 it('does not report an airborne actor as supported at its jump apex', async () => {
   const runtime = await WorldRuntime.createHeadless(true);
   try {
