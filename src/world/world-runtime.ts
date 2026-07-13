@@ -49,10 +49,10 @@ export class WorldRuntime {
   private disposed = false;
 
   private constructor(
-    private readonly canvas: HTMLCanvasElement,
-    private readonly renderer: THREE.WebGLRenderer,
-    private readonly scene: THREE.Scene,
-    private readonly camera: THREE.PerspectiveCamera,
+    private readonly canvas: HTMLCanvasElement | null,
+    private readonly renderer: THREE.WebGLRenderer | null,
+    private readonly scene: THREE.Scene | null,
+    private readonly camera: THREE.PerspectiveCamera | null,
     private readonly physicsWorld: RAPIER.World,
   ) {}
 
@@ -77,6 +77,11 @@ export class WorldRuntime {
     return runtime;
   }
 
+  static async createHeadless(): Promise<WorldRuntime> {
+    await initializeRapier();
+    return new WorldRuntime(null, null, null, null, new RAPIER.World({ x: 0, y: -9.81, z: 0 }));
+  }
+
   spawnPlayer(position: Vec3, entityId: EntityId): RAPIER.RigidBody {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(position.x, position.y, position.z)
@@ -87,6 +92,11 @@ export class WorldRuntime {
     const collider = this.physicsWorld.createCollider(colliderDesc, body);
     this.colliderEntityIds.set(collider.handle, entityId);
     return body;
+  }
+
+  step(dt: number): void {
+    this.physicsWorld.timestep = dt;
+    this.physicsWorld.step();
   }
 
   raycast(origin: Vec3, direction: Vec3, maxDistance: number): RayHit | null {
@@ -111,6 +121,7 @@ export class WorldRuntime {
   }
 
   render(cameraPose: CameraPose): void {
+    if (!this.camera || !this.renderer || !this.scene) return;
     applyCameraPose(this.camera, cameraPose);
     this.renderer.render(this.scene, this.camera);
   }
@@ -123,10 +134,11 @@ export class WorldRuntime {
     for (const geometry of this.disposableGeometries) geometry.dispose();
     for (const material of this.disposableMaterials) material.dispose();
     this.physicsWorld.free();
-    this.renderer.dispose();
+    this.renderer?.dispose();
   }
 
   private readonly resize = (): void => {
+    if (!this.canvas || !this.renderer || !this.camera) return;
     const width = this.canvas.clientWidth || window.innerWidth;
     const height = this.canvas.clientHeight || window.innerHeight;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_DEVICE_PIXEL_RATIO));
@@ -136,6 +148,7 @@ export class WorldRuntime {
   };
 
   private buildGraybox(): void {
+    if (!this.scene) return;
     const map = createBorderStationGraybox();
     for (const solid of map.solids) {
       const geometry = new THREE.BoxGeometry(solid.size.x, solid.size.y, solid.size.z);
@@ -164,6 +177,7 @@ export class WorldRuntime {
   }
 
   private addLighting(): void {
+    if (!this.scene) return;
     this.scene.add(new THREE.HemisphereLight(0xbfd9e8, 0x8b6b42, 2.2));
     const sun = new THREE.DirectionalLight(0xfff1d0, 2.6);
     sun.position.set(8, 18, 12);
