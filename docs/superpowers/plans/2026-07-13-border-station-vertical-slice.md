@@ -637,7 +637,7 @@ git commit -m "feat: add vertical slice hitscan combat"
 **Interfaces:**
 - Consumes once per fixed tick: carrier ID, the complete actor-action snapshot (team, position, `interact`, alive, and kit flag), site bounds, and fixed `dt`.
 - Produces: `BombSnapshot { state, carrierId, position, progress, remaining }` and one-shot events `planted`, `defused`, `exploded`.
-- Composition: `stepBombAndMatch` updates `BombSystem` once, snapshots it, derives `bombFactsFrom(snapshot)`, and only then updates `MatchController`.
+- Composition: `stepBombAndMatch` gates objective advancement by the pre-step match phase, updates `BombSystem` at most once, snapshots it, derives `bombFactsFrom(snapshot)`, and only then updates `MatchController`.
 
 - [ ] **Step 1: Write failing plant and defuse tests**
 

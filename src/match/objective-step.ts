@@ -14,7 +14,15 @@ export function stepBombAndMatch(
   site: SiteBounds,
   alive: AliveFacts,
 ): BombEvent[] {
-  const events = bomb.update(dt, actors, site);
+  const matchPhase = match.snapshot().phase;
+  const bombState = bomb.snapshot().state;
+  const canAdvancePlant = matchPhase === 'live'
+    && (bombState === 'carried' || bombState === 'dropped' || bombState === 'planting');
+  const canAdvancePlanted = matchPhase === 'planted'
+    && (bombState === 'planted' || bombState === 'defusing');
+  const events = canAdvancePlant || canAdvancePlanted
+    ? bomb.update(dt, actors, site)
+    : [];
   match.update(dt, { ...alive, ...bombFactsFrom(bomb.snapshot()) });
   return events;
 }
