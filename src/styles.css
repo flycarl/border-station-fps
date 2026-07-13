@@ -1,0 +1,4 @@
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #172733; }
+#game-canvas { width: 100%; height: 100%; display: block; }
+#ui-root { position: absolute; inset: 0; pointer-events: none; font-family: Inter, system-ui, sans-serif; color: #edf5f7; }
+button { pointer-events: auto; font: inherit; }
