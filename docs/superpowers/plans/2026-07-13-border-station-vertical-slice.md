@@ -6,7 +6,7 @@
 
 **Architecture:** TypeScript modules own deterministic game rules and consume a shared `PlayerCommand` format for both human and AI actors. Rapier owns collision and character motion, Three.js renders an interpolated view of rule state, and DOM UI observes snapshots without mutating simulation state. The slice uses a 60 Hz fixed update and preserves the spec's future server-authoritative boundary.
 
-**Tech Stack:** Node.js 26+, npm 11+, TypeScript 7.0.2, Vite 8.1.4, Three.js 0.185.1, Rapier compat 0.19.3, Vitest 4.1.10, Playwright 1.61.1, jsdom 29.1.1, Node.js type definitions 26.1.1.
+**Tech Stack:** Node.js 26+, npm 11+, TypeScript 7.0.2, Vite 8.1.4, Three.js 0.185.1, Three.js type definitions 0.185.1, Rapier compat 0.19.3, Vitest 4.1.10, Playwright 1.61.1, jsdom 29.1.1, Node.js type definitions 26.1.1.
 
 ## Global Constraints
 
@@ -107,6 +107,7 @@ Expected: command fails because `package.json` and the test runner do not exist.
   "devDependencies": {
     "@playwright/test": "1.61.1",
     "@types/node": "26.1.1",
+    "@types/three": "0.185.1",
     "jsdom": "29.1.1",
     "typescript": "7.0.2",
     "vite": "8.1.4",
@@ -126,6 +127,7 @@ Expected: command fails because `package.json` and the test runner do not exist.
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client", "vitest/globals"]
   },
