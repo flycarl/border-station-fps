@@ -6,7 +6,7 @@ Date: 2026-07-13 (Asia/Shanghai)
 
 PASS for the scoped desktop vertical slice. The production preview starts behind a deliberate modal, resumes only after confirmed pointer lock, runs one 60 Hz RAF composition, uses Rapier support queries for jumping, renders six command-driven actors, exposes snapshot-only HUD state, pauses on Escape/pointer-lock loss, and restarts without adding physics bodies, colliders, renderer geometries, listeners, or RAF loops.
 
-Known release note: Vite reports a 2,788.47 kB minified / 984.30 kB gzip JavaScript chunk, primarily Three.js + Rapier. Code splitting is deferred beyond this vertical slice.
+Known release note: Vite reports a 2,790.87 kB minified / 984.97 kB gzip JavaScript chunk, primarily Three.js + Rapier. Code splitting is deferred beyond this vertical slice.
 
 ## Reference ledger
 
@@ -21,29 +21,14 @@ Known release note: Vite reports a 2,788.47 kB minified / 984.30 kB gzip JavaScr
 
 ## Automated verification
 
-RED evidence:
+Superseded initial implementation RED evidence (retained as history):
 
 - `npm test -- --run tests/ui/hud.test.ts tests/ui/start-screen.test.ts`: failed because both UI modules were absent.
 - `npm test -- --run tests/game.test.ts tests/input/keyboard-mouse.test.ts tests/world/world-runtime.test.ts`: failed for missing game composition, unimplemented number-key slots, and missing world diagnostics/removal.
 - `npm run test:e2e`: after Chromium installation, failed because `开始任务` was absent.
 - Restart regression: the extended browser test failed with renderer geometries increasing from 10 to 14 while bodies/colliders stayed 6/12. Actor meshes now dispose geometry/material resources in `WorldRuntime.removePlayer`.
 
-GREEN evidence:
-
-```text
-npm test -- --run tests/ui/hud.test.ts tests/ui/start-screen.test.ts
-2 files, 4 tests passed
-
-npm test -- --run tests/game.test.ts tests/input/keyboard-mouse.test.ts tests/world/world-runtime.test.ts tests/ui/hud.test.ts tests/ui/start-screen.test.ts
-5 files, 11 tests passed
-
-npm run test:e2e
-1 Playwright test passed, including nonblank center pixel and restart resource equality
-```
-
-Final fresh verification: `npm test -- --run && npm run typecheck && npm run build && npm run test:e2e` completed with 15 test files / 67 unit and integration tests passed, typecheck exit 0, production build exit 0, and 1 Playwright test passed.
-
-Task 8 review verification (fresh production build): the same command completed with 15 test files / 74 tests passed, typecheck exit 0, Vite build exit 0, and 6 Playwright Chromium tests passed in 8.3 seconds. The built JS was 2,790.87 kB / 984.97 kB gzip (size warning only).
+Final fresh verification: `npm test -- --run && npm run typecheck && npm run build && npm run test:e2e && git diff --check` passed with 15 Vitest files / 74 tests, TypeScript no-emit, Vite production build, 7 Playwright Chromium tests in 8.6 seconds, and a clean diff check. The Playwright total comprises six production game scenarios plus the focused injected-page-error audit regression. Built JS: 2,790.87 kB / 984.97 kB gzip (size warning only).
 
 Review RED evidence:
 
@@ -52,6 +37,7 @@ Review RED evidence:
 - Start-screen tests showed the modal hidden before lock confirmation and no `setLockError`; HUD test showed the continuously rewritten `.hud` carried `aria-live`.
 - First Chromium retry: rejected pointer lock kept the game paused correctly, but the status locator was ambiguous; this was narrowed to the modal status.
 - First composed defuse retry stayed `planted`: placing the defender inside the live planter collider let Rapier separate it from the objective. The deterministic setup now moves the planter away, then places the defender at the real bomb snapshot position.
+- Browser-audit regression initially stopped the preview build because `installBrowserAudit` did not exist; after the shared listener was added, an injected `audit sentinel` page error was collected and the production-preview clean audit asserted an empty page-error list.
 
 ## Production browser evidence
 
@@ -60,7 +46,7 @@ Review RED evidence:
 - Canvas CSS and drawing buffer: 1440×900 / 1440×900.
 - Active core loop: held `W` through freeze into live play; the human moved from `(-2, 1, 25)` to approximately `(-2, 0.849, 15.680)`. Phase advanced from `freeze` to `live`, and `phaseRemaining` reached 103.42 seconds.
 - Pixel variance: 25/25 sampled canvas pixels were nonblank with 7 unique RGBA values.
-- Browser audit: 0 console errors, 0 page errors, 0 failed network requests.
+- Primary production-preview browser audit: 0 console errors, 0 uncaught page errors, 0 failed network requests. The shared `pageerror` collector is proven by a focused injected-error regression.
 - Pause/restart: Escape exposed `重新开始`; restart returned score to 0–0, phase to `freeze`, six actors, and one active RAF diagnostic.
 - Screenshot: [vertical-slice-active-1440x900.png](./vertical-slice-active-1440x900.png)
 

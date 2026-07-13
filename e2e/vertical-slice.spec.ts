@@ -1,10 +1,32 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+function installBrowserAudit(page: Page): {
+  consoleErrors: string[];
+  pageErrors: string[];
+  failedRequests: string[];
+} {
+  const audit = {
+    consoleErrors: [] as string[],
+    pageErrors: [] as string[],
+    failedRequests: [] as string[],
+  };
+  page.on('console', (message) => {
+    if (message.type() === 'error') audit.consoleErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => audit.pageErrors.push(error.message));
+  page.on('requestfailed', (request) => audit.failedRequests.push(request.url()));
+  return audit;
+}
+
+test('browser audit records uncaught page errors', async ({ page }) => {
+  const audit = installBrowserAudit(page);
+  await page.goto('/');
+  await page.evaluate(() => setTimeout(() => { throw new Error('audit sentinel'); }, 0));
+  await expect.poll(() => audit.pageErrors).toEqual(['audit sentinel']);
+});
 
 test('starts a nonblank match and exposes restart', async ({ page }) => {
-  const consoleErrors: string[] = [];
-  const failedRequests: string[] = [];
-  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
-  page.on('requestfailed', (request) => failedRequests.push(request.url()));
+  const audit = installBrowserAudit(page);
   await page.addInitScript(() => {
     let locked: Element | null = null;
     Object.defineProperty(document, 'pointerLockElement', {
@@ -53,8 +75,9 @@ test('starts a nonblank match and exposes restart', async ({ page }) => {
     colliders: window.__THREE_GAME_DIAGNOSTICS__?.physics.colliders,
   }));
   expect(afterRestart).toEqual(beforeRestart);
-  expect(consoleErrors).toEqual([]);
-  expect(failedRequests).toEqual([]);
+  expect(audit.consoleErrors).toEqual([]);
+  expect(audit.pageErrors).toEqual([]);
+  expect(audit.failedRequests).toEqual([]);
 });
 
 test('keeps play paused when pointer lock is rejected and resumes only after confirmation', async ({ page }) => {

@@ -6,7 +6,7 @@ Status: complete.
 
 Implemented `Game.create(canvas, uiRoot)`, guarded single-RAF startup, fixed 60 Hz composition, six-player roster, command-driven human/AI control, real Rapier actor raycasts, snapshot-only HUD, deliberate start/pause modal, pointer-lock-safe pause, clean restart/disposal, and gated `?debug=1` renderer/physics/state diagnostics.
 
-## RED / GREEN
+## Initial RED / GREEN history (superseded by the review-fix addenda)
 
 - RED UI: missing `src/ui/hud.ts` and `src/ui/start-screen.ts` produced expected module-resolution failures.
 - GREEN UI: 4 focused HUD/start-screen tests passed.
@@ -57,9 +57,8 @@ Loaded and applied UI patterns plus UI quality/HUD readability/responsive fit, d
 
 ## Concerns
 
-- Browser evidence does not include a complete human plant/defuse round; deterministic BombSystem/MatchController tests cover those transitions.
 - `preserveDrawingBuffer` supports exact packaged pixel evidence but can cost GPU performance.
-- Vite warns about the 2.788 MB minified single JS chunk (984 kB gzip).
+- Vite warns about the 2.791 MB minified single JS chunk (985 kB gzip).
 - No mobile controls or mobile QA were added because this task is explicitly desktop-only.
 
 ## Commands/results
@@ -78,16 +77,6 @@ PASS: Chromium 149 and headless shell installed
 
 npm run test:e2e
 RED old bootstrap, GREEN initial browser flow, RED geometry leak regression, GREEN clean restart
-```
-
-Final fresh verification:
-
-```text
-npm test -- --run && npm run typecheck && npm run build && npm run test:e2e
-PASS: 15 test files / 67 tests
-PASS: TypeScript no-emit typecheck
-PASS: Vite production build (2,788.47 kB JS / 984.30 kB gzip; size warning only)
-PASS: 1 Playwright Chromium test
 ```
 
 Commit: `72f56ee` (`feat: complete playable border station slice`).
@@ -114,7 +103,15 @@ npm test -- --run && npm run typecheck && npm run build && npm run test:e2e
 PASS: 15 Vitest files / 74 tests
 PASS: TypeScript no-emit
 PASS: Vite production build, 2,790.87 kB JS / 984.97 kB gzip (size warning only)
-PASS: 6 Playwright Chromium tests / 8.3 s
+PASS: 7 Playwright Chromium tests / 8.6 s (six production game scenarios plus focused page-error collector regression)
 ```
 
-Browser evidence: 0 console errors, 0 failed requests, nonblank center pixel, 1440×900 screenshot refreshed. Restart remains equal before/after at 9 geometries, 6 bodies, and 12 colliders.
+Browser evidence: 0 console errors, 0 uncaught page errors, 0 failed requests, nonblank center pixel, 1440×900 screenshot refreshed. Restart remains equal before/after at 9 geometries, 6 bodies, and 12 colliders.
+
+## Page-error audit addendum (2026-07-13)
+
+- Added a shared Playwright browser audit collector for console errors, uncaught `pageerror` events, and failed requests.
+- The primary production-preview scenario now asserts all three collections are empty.
+- Focused regression injects an uncaught `audit sentinel` and proves the listener records its message. Initial RED: the preview build could not start because `installBrowserAudit` was undefined. Focused GREEN: 2 Playwright tests passed.
+- Superseded 67-test / 1-E2E summaries and the obsolete missing-objective concern were removed; historical initial RED evidence is explicitly labeled superseded.
+- Final fresh gate: 15 Vitest files / 74 tests, typecheck, Vite production build (2,790.87 kB / 984.97 kB gzip), 7 Playwright tests in 8.6 seconds, and `git diff --check` all passed.
