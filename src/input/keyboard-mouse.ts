@@ -22,6 +22,17 @@ export class KeyboardMouseInput {
     this.buttons.delete(event.button);
   };
 
+  private resetHeldControls = (): void => {
+    this.keys.clear();
+    this.buttons.clear();
+  };
+
+  private visibilityChange = (): void => {
+    if (this.doc.visibilityState === 'hidden') {
+      this.resetHeldControls();
+    }
+  };
+
   private move = (event: MouseEvent): void => {
     if (this.doc.pointerLockElement) {
       this.yaw -= event.movementX * 0.002;
@@ -38,6 +49,8 @@ export class KeyboardMouseInput {
     doc.addEventListener('mousedown', this.mouseDown);
     doc.addEventListener('mouseup', this.mouseUp);
     doc.addEventListener('mousemove', this.move);
+    doc.defaultView?.addEventListener('blur', this.resetHeldControls);
+    doc.addEventListener('visibilitychange', this.visibilityChange);
   }
 
   sample(): PlayerCommand {
@@ -63,5 +76,7 @@ export class KeyboardMouseInput {
     this.doc.removeEventListener('mousedown', this.mouseDown);
     this.doc.removeEventListener('mouseup', this.mouseUp);
     this.doc.removeEventListener('mousemove', this.move);
+    this.doc.defaultView?.removeEventListener('blur', this.resetHeldControls);
+    this.doc.removeEventListener('visibilitychange', this.visibilityChange);
   }
 }
