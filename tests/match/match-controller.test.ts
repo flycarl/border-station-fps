@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { BombSystem } from '../../src/match/bomb-system';
-import { bombFactsFrom, MatchController } from '../../src/match/match-controller';
+import { MatchController } from '../../src/match/match-controller';
+import { stepBombAndMatch } from '../../src/match/objective-step';
 
 it('moves freeze to live and awards defense on timeout', () => {
   const match = new MatchController({ freeze: 12, live: 105, result: 5, roundsToWin: 7, halftimeAfter: 6 });
@@ -10,7 +11,7 @@ it('moves freeze to live and awards defense on timeout', () => {
   expect(match.snapshot()).toMatchObject({ phase: 'result', defenseScore: 1 });
 });
 
-it('does not award attack for defender elimination after the bomb is planted', () => {
+it('does not resolve elimination after plant until the objective resolves', () => {
   const match = new MatchController({ freeze: 0, live: 105, result: 5, roundsToWin: 7, halftimeAfter: 6 });
   const bomb = BombSystem.plantedForTest({ plantSeconds: 3.2, fuseSeconds: 2, defuseSeconds: 7, kitDefuseSeconds: 3.5 });
   const actor = {
@@ -23,11 +24,32 @@ it('does not award attack for defender elimination after the bomb is planted', (
   };
   const site = { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 2, z: 5 } };
 
-  match.update(0, { attackersAlive: 1, defendersAlive: 1, ...bombFactsFrom(bomb.snapshot()) });
-  match.update(0, { attackersAlive: 1, defendersAlive: 0, ...bombFactsFrom(bomb.snapshot()) });
+  stepBombAndMatch(bomb, match, 0, [actor], site, { attackersAlive: 1, defendersAlive: 1 });
+  stepBombAndMatch(bomb, match, 0, [actor], site, { attackersAlive: 0, defendersAlive: 0 });
   expect(match.snapshot()).toMatchObject({ phase: 'planted', attackScore: 0 });
 
-  bomb.update(2, actor, site);
-  match.update(2, { attackersAlive: 1, defendersAlive: 0, ...bombFactsFrom(bomb.snapshot()) });
+  stepBombAndMatch(bomb, match, 2, [actor], site, { attackersAlive: 0, defendersAlive: 0 });
   expect(match.snapshot()).toMatchObject({ phase: 'result', attackScore: 1, winner: 'attack' });
+});
+
+it('enters planted phase after 3.2 seconds through production composition', () => {
+  const match = new MatchController({ freeze: 0, live: 105, result: 5, roundsToWin: 7, halftimeAfter: 6 });
+  const bomb = new BombSystem({ plantSeconds: 3.2, fuseSeconds: 35, defuseSeconds: 7, kitDefuseSeconds: 3.5 }, 'attacker-1');
+  const actor = {
+    actorId: 'attacker-1',
+    team: 'attack' as const,
+    position: { x: 0, y: 0, z: 0 },
+    interact: true,
+    alive: true,
+    hasKit: false,
+  };
+  const site = { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 2, z: 5 } };
+
+  stepBombAndMatch(bomb, match, 0, [actor], site, { attackersAlive: 1, defendersAlive: 1 });
+  for (let tick = 0; tick < 3.2 * 60; tick++) {
+    stepBombAndMatch(bomb, match, 1 / 60, [actor], site, { attackersAlive: 1, defendersAlive: 1 });
+  }
+
+  expect(bomb.snapshot().state).toBe('planted');
+  expect(match.snapshot().phase).toBe('planted');
 });

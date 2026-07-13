@@ -43,11 +43,19 @@ export interface BombEvent {
 }
 
 const DEFUSE_HALF_EXTENTS: Vec3 = { x: 1.5, y: 1.5, z: 1.5 };
+const PICKUP_HALF_EXTENTS: Vec3 = { x: 1.5, y: 1.5, z: 1.5 };
+const TIME_EPSILON = 1e-9;
 
 function inside(position: Vec3, bounds: SiteBounds): boolean {
   return Math.abs(position.x - bounds.center.x) <= bounds.halfExtents.x
     && Math.abs(position.y - bounds.center.y) <= bounds.halfExtents.y
     && Math.abs(position.z - bounds.center.z) <= bounds.halfExtents.z;
+}
+
+function byActorId(left: ActorAction, right: ActorAction): number {
+  if (left.actorId < right.actorId) return -1;
+  if (left.actorId > right.actorId) return 1;
+  return 0;
 }
 
 export class BombSystem {
@@ -71,13 +79,17 @@ export class BombSystem {
     return bomb;
   }
 
-  update(dt: number, actor: ActorAction, site: SiteBounds): BombEvent[] {
+  update(dt: number, actors: readonly ActorAction[], site: SiteBounds): BombEvent[] {
     const elapsed = Math.max(0, dt);
     if (this.state === 'carried' || this.state === 'planting') {
-      return this.updatePlant(elapsed, actor, site);
+      return this.updateCarried(elapsed, actors, site);
+    }
+    if (this.state === 'dropped') {
+      this.updateDropped(actors);
+      return [];
     }
     if (this.state === 'planted' || this.state === 'defusing') {
-      return this.updatePlanted(elapsed, actor);
+      return this.updatePlanted(elapsed, actors);
     }
     return [];
   }
@@ -92,12 +104,24 @@ export class BombSystem {
     };
   }
 
-  private updatePlant(dt: number, actor: ActorAction, site: SiteBounds): BombEvent[] {
-    if (actor.actorId !== this.carrierId) return [];
+  private updateCarried(
+    dt: number,
+    actors: readonly ActorAction[],
+    site: SiteBounds,
+  ): BombEvent[] {
+    const actor = actors.find(({ actorId }) => actorId === this.carrierId);
+    if (!actor) return [];
+
+    if (!actor.alive) {
+      this.state = 'dropped';
+      this.position = { ...actor.position };
+      this.progress = 0;
+      this.carrierId = null;
+      return [];
+    }
 
     const valid = actor.team === 'attack'
       && actor.interact
-      && actor.alive
       && inside(actor.position, site);
     if (!valid) {
       this.state = 'carried';
@@ -107,7 +131,7 @@ export class BombSystem {
 
     this.state = 'planting';
     this.progress += dt;
-    if (this.progress < this.config.plantSeconds) return [];
+    if (this.progress + TIME_EPSILON < this.config.plantSeconds) return [];
 
     this.state = 'planted';
     this.position = { ...actor.position };
@@ -116,23 +140,44 @@ export class BombSystem {
     return [{ type: 'planted' }];
   }
 
-  private updatePlanted(dt: number, actor: ActorAction): BombEvent[] {
+  private updateDropped(actors: readonly ActorAction[]): void {
+    const actor = actors
+      .filter((candidate) => candidate.team === 'attack'
+        && candidate.alive
+        && candidate.interact
+        && inside(candidate.position, {
+          center: this.position,
+          halfExtents: PICKUP_HALF_EXTENTS,
+        }))
+      .sort(byActorId)[0];
+    if (!actor) return;
+
+    this.state = 'carried';
+    this.carrierId = actor.actorId;
+  }
+
+  private updatePlanted(dt: number, actors: readonly ActorAction[]): BombEvent[] {
     this.remaining = Math.max(0, this.remaining - dt);
-    if (this.remaining === 0) {
+    if (this.remaining <= TIME_EPSILON) {
+      this.remaining = 0;
       this.state = 'exploded';
       this.progress = 0;
       this.activeDefuserId = null;
       return [{ type: 'exploded' }];
     }
 
+    let actor: ActorAction | undefined;
     if (this.activeDefuserId !== null) {
-      if (actor.actorId !== this.activeDefuserId) return [];
-      if (!this.canDefuse(actor)) {
+      actor = actors.find(({ actorId }) => actorId === this.activeDefuserId);
+      if (!actor || !this.canDefuse(actor)) {
         this.cancelDefuse();
         return [];
       }
     } else {
-      if (!this.canDefuse(actor)) return [];
+      actor = actors
+        .filter((candidate) => this.canDefuse(candidate))
+        .sort(byActorId)[0];
+      if (!actor) return [];
       this.activeDefuserId = actor.actorId;
       this.activeDefuserHasKit = actor.hasKit;
       this.state = 'defusing';
@@ -142,7 +187,7 @@ export class BombSystem {
     const duration = this.activeDefuserHasKit
       ? this.config.kitDefuseSeconds
       : this.config.defuseSeconds;
-    if (this.progress < duration) return [];
+    if (this.progress + TIME_EPSILON < duration) return [];
 
     this.state = 'defused';
     this.activeDefuserId = null;

@@ -629,13 +629,15 @@ git commit -m "feat: add vertical slice hitscan combat"
 
 **Files:**
 - Create: `src/match/bomb-system.ts`
+- Create: `src/match/objective-step.ts`
 - Create: `tests/match/bomb-system.test.ts`
 - Modify: `src/match/match-controller.ts`
 - Modify: `tests/match/match-controller.test.ts`
 
 **Interfaces:**
-- Consumes: carrier ID, actor team, actor position, `interact`, site bounds, fixed `dt`, and kit flag.
+- Consumes once per fixed tick: carrier ID, the complete actor-action snapshot (team, position, `interact`, alive, and kit flag), site bounds, and fixed `dt`.
 - Produces: `BombSnapshot { state, carrierId, position, progress, remaining }` and one-shot events `planted`, `defused`, `exploded`.
+- Composition: `stepBombAndMatch` updates `BombSystem` once, snapshots it, derives `bombFactsFrom(snapshot)`, and only then updates `MatchController`.
 
 - [ ] **Step 1: Write failing plant and defuse tests**
 
@@ -646,12 +648,12 @@ import { BombSystem } from '../../src/match/bomb-system';
 const site = { center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 5, y: 2, z: 5 } };
 it('plants after 3.2 uninterrupted seconds inside site', () => {
   const bomb = new BombSystem({ plantSeconds: 3.2, fuseSeconds: 35, defuseSeconds: 7, kitDefuseSeconds: 3.5 }, 'attacker-1');
-  bomb.update(3.2, { actorId: 'attacker-1', team: 'attack', position: { x: 0, y: 0, z: 0 }, interact: true, alive: true, hasKit: false }, site);
+  bomb.update(3.2, [{ actorId: 'attacker-1', team: 'attack', position: { x: 0, y: 0, z: 0 }, interact: true, alive: true, hasKit: false }], site);
   expect(bomb.snapshot().state).toBe('planted');
 });
 it('uses the kit defuse duration', () => {
   const bomb = BombSystem.plantedForTest({ plantSeconds: 3.2, fuseSeconds: 35, defuseSeconds: 7, kitDefuseSeconds: 3.5 });
-  bomb.update(3.5, { actorId: 'defender-1', team: 'defense', position: { x: 0, y: 0, z: 0 }, interact: true, alive: true, hasKit: true }, site);
+  bomb.update(3.5, [{ actorId: 'defender-1', team: 'defense', position: { x: 0, y: 0, z: 0 }, interact: true, alive: true, hasKit: true }], site);
   expect(bomb.snapshot().state).toBe('defused');
 });
 ```
@@ -676,16 +678,9 @@ export class BombSystem {
   private state: BombState = 'carried'; private progress = 0; private remaining: number; private position: Vec3 = { x: 0, y: 0, z: 0 };
   constructor(private readonly config: BombConfig, private carrierId: EntityId | null) { this.remaining = config.fuseSeconds; }
   static plantedForTest(config: BombConfig): BombSystem { const bomb = new BombSystem(config, null); bomb.state = 'planted'; return bomb; }
-  update(dt: number, actor: ActorAction, site: SiteBounds): void {
-    if ((this.state === 'carried' || this.state === 'planting') && actor.actorId === this.carrierId && actor.team === 'attack') {
-      if (actor.interact && actor.alive && inside(actor.position, site)) { this.state = 'planting'; this.progress += dt; if (this.progress >= this.config.plantSeconds) { this.state = 'planted'; this.position = actor.position; this.progress = 0; this.carrierId = null; } }
-      else { this.state = 'carried'; this.progress = 0; }
-    } else if (this.state === 'planted' || this.state === 'defusing') {
-      this.remaining = Math.max(0, this.remaining - dt);
-      if (this.remaining === 0) { this.state = 'exploded'; return; }
-      if (actor.team === 'defense' && actor.interact && actor.alive && inside(actor.position, { center: this.position, halfExtents: { x: 1.5, y: 1.5, z: 1.5 } })) { this.state = 'defusing'; this.progress += dt; if (this.progress >= (actor.hasKit ? this.config.kitDefuseSeconds : this.config.defuseSeconds)) this.state = 'defused'; }
-      else if (this.state === 'defusing') { this.state = 'planted'; this.progress = 0; }
-    }
+  update(dt: number, actors: readonly ActorAction[], site: SiteBounds): BombEvent[] {
+    // Consume the complete snapshot exactly once. Resolve the carrier/active defuser
+    // by ID, then advance plant, fuse, or defuse time no more than once for this tick.
   }
   snapshot() { return { state: this.state, carrierId: this.carrierId, position: this.position, progress: this.progress, remaining: this.remaining }; }
 }
@@ -693,7 +688,7 @@ export class BombSystem {
 
 - [ ] **Step 4: Feed bomb facts into match rules**
 
-Update the fixed-step composition so `BombSystem.update` runs before `MatchController.update`, and derive `bombPlanted`, `bombExploded`, and `bombDefused` from the bomb snapshot. Add a regression test that all defenders dying after plant does not award attackers until explosion.
+Use the production `stepBombAndMatch` boundary so `BombSystem.update` runs once before `MatchController.update`, and derive `bombPlanted`, `bombExploded`, and `bombDefused` from the post-update bomb snapshot. Add a regression test that elimination after plant does not resolve the round until defuse or explosion.
 
 - [ ] **Step 5: Run match tests**
 
