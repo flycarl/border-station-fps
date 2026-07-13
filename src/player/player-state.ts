@@ -1,4 +1,8 @@
 import type { EntityId, Team, Vec3 } from '../core/types';
+import {
+  createWeaponState,
+  type WeaponState,
+} from '../weapons/weapon-system';
 
 export interface PlayerState {
   id: EntityId;
@@ -10,6 +14,8 @@ export interface PlayerState {
   armor: number;
   alive: boolean;
   grounded: boolean;
+  primary: WeaponState;
+  sidearm: WeaponState;
 }
 
 export const createPlayerState = (
@@ -26,4 +32,6 @@ export const createPlayerState = (
   armor: 0,
   alive: true,
   grounded: false,
+  primary: createWeaponState('vanguard-rifle'),
+  sidearm: createWeaponState('sidearm-9'),
 });

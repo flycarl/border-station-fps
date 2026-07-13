@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import type { Vec3 } from '../core/types';
+import type { EntityId, Vec3 } from '../core/types';
 import {
   BORDER_STATION_RAMP_PITCH,
   createBorderStationGraybox,
@@ -77,14 +77,15 @@ export class WorldRuntime {
     return runtime;
   }
 
-  spawnPlayer(position: Vec3): RAPIER.RigidBody {
+  spawnPlayer(position: Vec3, entityId: EntityId): RAPIER.RigidBody {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(position.x, position.y, position.z)
       .lockRotations()
       .setLinearDamping(PLAYER_LINEAR_DAMPING);
     const body = this.physicsWorld.createRigidBody(bodyDesc);
     const colliderDesc = RAPIER.ColliderDesc.capsule(PLAYER_HALF_HEIGHT, PLAYER_RADIUS);
-    this.physicsWorld.createCollider(colliderDesc, body);
+    const collider = this.physicsWorld.createCollider(colliderDesc, body);
+    this.colliderEntityIds.set(collider.handle, entityId);
     return body;
   }
 
