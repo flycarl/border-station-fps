@@ -19,6 +19,23 @@ export interface RayHit {
   point: Vec3;
 }
 
+export interface WorldDiagnostics {
+  engine: 'rapier';
+  timestep: number;
+  bodies: number;
+  colliders: number;
+  sensors: number;
+  ccdBodies: number;
+  renderer: {
+    calls: number;
+    triangles: number;
+    points: number;
+    lines: number;
+    geometries: number;
+    textures: number;
+  };
+}
+
 const MAX_DEVICE_PIXEL_RATIO = 2;
 const PLAYER_HALF_HEIGHT = 0.5;
 const PLAYER_RADIUS = 0.35;
@@ -46,6 +63,8 @@ export class WorldRuntime {
   private readonly colliderEntityIds = new Map<number, string>();
   private readonly disposableGeometries: THREE.BufferGeometry[] = [];
   private readonly disposableMaterials: THREE.Material[] = [];
+  private readonly playerBodies = new Map<EntityId, RAPIER.RigidBody>();
+  private readonly playerMeshes = new Map<EntityId, THREE.Mesh>();
   private disposed = false;
 
   private constructor(
@@ -59,7 +78,11 @@ export class WorldRuntime {
   static async create(canvas: HTMLCanvasElement): Promise<WorldRuntime> {
     await initializeRapier();
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      preserveDrawingBuffer: true,
+    });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_DEVICE_PIXEL_RATIO));
     renderer.setClearColor(0x172733);
 
@@ -83,6 +106,9 @@ export class WorldRuntime {
   }
 
   spawnPlayer(position: Vec3, entityId: EntityId): RAPIER.RigidBody {
+    if (this.playerBodies.has(entityId)) {
+      throw new Error(`Player already exists: ${entityId}`);
+    }
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(position.x, position.y, position.z)
       .lockRotations()
@@ -91,7 +117,40 @@ export class WorldRuntime {
     const colliderDesc = RAPIER.ColliderDesc.capsule(PLAYER_HALF_HEIGHT, PLAYER_RADIUS);
     const collider = this.physicsWorld.createCollider(colliderDesc, body);
     this.colliderEntityIds.set(collider.handle, entityId);
+    this.playerBodies.set(entityId, body);
+
+    if (this.scene) {
+      const geometry = new THREE.CapsuleGeometry(PLAYER_RADIUS, PLAYER_HALF_HEIGHT * 2, 4, 8);
+      const material = new THREE.MeshStandardMaterial({
+        color: entityId.startsWith('attack') ? 0xd89042 : 0x55a7c4,
+        roughness: 0.72,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = true;
+      mesh.visible = entityId !== 'attack-human';
+      mesh.position.set(position.x, position.y, position.z);
+      this.scene.add(mesh);
+      this.playerMeshes.set(entityId, mesh);
+    }
     return body;
+  }
+
+  removePlayer(entityId: EntityId): void {
+    const body = this.playerBodies.get(entityId);
+    if (!body) return;
+    for (let index = 0; index < body.numColliders(); index++) {
+      this.colliderEntityIds.delete(body.collider(index).handle);
+    }
+    this.physicsWorld.removeRigidBody(body);
+    this.playerBodies.delete(entityId);
+    const mesh = this.playerMeshes.get(entityId);
+    if (mesh) {
+      mesh.removeFromParent();
+      mesh.geometry.dispose();
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) material.dispose();
+    }
+    this.playerMeshes.delete(entityId);
   }
 
   step(dt: number): void {
@@ -99,7 +158,12 @@ export class WorldRuntime {
     this.physicsWorld.step();
   }
 
-  raycast(origin: Vec3, direction: Vec3, maxDistance: number): RayHit | null {
+  raycast(
+    origin: Vec3,
+    direction: Vec3,
+    maxDistance: number,
+    excludeEntityId?: EntityId,
+  ): RayHit | null {
     const length = Math.hypot(direction.x, direction.y, direction.z);
     if (length === 0 || maxDistance < 0) return null;
 
@@ -109,7 +173,18 @@ export class WorldRuntime {
       z: direction.z / length,
     };
     const ray = new RAPIER.Ray(origin, normalizedDirection);
-    const hit = this.physicsWorld.castRay(ray, maxDistance, true);
+    const hit = this.physicsWorld.castRay(
+      ray,
+      maxDistance,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      excludeEntityId === undefined
+        ? undefined
+        : (collider) => this.colliderEntityIds.get(collider.handle) !== excludeEntityId,
+    );
     if (!hit) return null;
 
     const point = ray.pointAt(hit.timeOfImpact);
@@ -122,8 +197,35 @@ export class WorldRuntime {
 
   render(cameraPose: CameraPose): void {
     if (!this.camera || !this.renderer || !this.scene) return;
+    for (const [entityId, mesh] of this.playerMeshes) {
+      const body = this.playerBodies.get(entityId);
+      if (!body) continue;
+      const position = body.translation();
+      mesh.position.set(position.x, position.y, position.z);
+    }
     applyCameraPose(this.camera, cameraPose);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  diagnostics(): WorldDiagnostics {
+    const render = this.renderer?.info.render;
+    const memory = this.renderer?.info.memory;
+    return {
+      engine: 'rapier',
+      timestep: this.physicsWorld.timestep,
+      bodies: this.physicsWorld.bodies.len(),
+      colliders: this.physicsWorld.colliders.len(),
+      sensors: 0,
+      ccdBodies: 0,
+      renderer: {
+        calls: render?.calls ?? 0,
+        triangles: render?.triangles ?? 0,
+        points: render?.points ?? 0,
+        lines: render?.lines ?? 0,
+        geometries: memory?.geometries ?? 0,
+        textures: memory?.textures ?? 0,
+      },
+    };
   }
 
   dispose(): void {
@@ -131,6 +233,7 @@ export class WorldRuntime {
     this.disposed = true;
 
     window.removeEventListener('resize', this.resize);
+    for (const entityId of [...this.playerBodies.keys()]) this.removePlayer(entityId);
     for (const geometry of this.disposableGeometries) geometry.dispose();
     for (const material of this.disposableMaterials) material.dispose();
     this.physicsWorld.free();

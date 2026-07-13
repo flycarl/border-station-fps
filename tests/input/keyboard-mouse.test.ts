@@ -25,3 +25,15 @@ it('clears held controls when the window loses focus', () => {
   });
   input.dispose();
 });
+
+it('maps number keys to rifle and pistol command slots', () => {
+  const input = new KeyboardMouseInput(document);
+
+  document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit2' }));
+  expect(input.sample().slot).toBe(2);
+  document.dispatchEvent(new KeyboardEvent('keyup', { code: 'Digit2' }));
+  document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit1' }));
+  expect(input.sample().slot).toBe(1);
+
+  input.dispose();
+});

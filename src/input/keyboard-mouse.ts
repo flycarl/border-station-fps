@@ -5,9 +5,14 @@ export class KeyboardMouseInput {
   private buttons = new Set<number>();
   private yaw = 0;
   private pitch = 0;
+  private slot: 1 | 2 | 3 | 4 = 1;
 
   private down = (event: KeyboardEvent): void => {
     this.keys.add(event.code);
+    if (event.code === 'Digit1') this.slot = 1;
+    if (event.code === 'Digit2') this.slot = 2;
+    if (event.code === 'Digit3') this.slot = 3;
+    if (event.code === 'Digit4') this.slot = 4;
   };
 
   private up = (event: KeyboardEvent): void => {
@@ -67,6 +72,7 @@ export class KeyboardMouseInput {
     command.fire = this.buttons.has(0);
     command.reload = this.keys.has('KeyR');
     command.interact = this.keys.has('KeyE');
+    command.slot = this.slot;
     return command;
   }
 

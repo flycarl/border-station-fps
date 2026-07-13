@@ -1,4 +1,89 @@
+:root {
+  color-scheme: dark;
+  font-family: "Arial Narrow", "Roboto Condensed", Inter, system-ui, sans-serif;
+  --ink: #eef4f2;
+  --muted: #aab9b8;
+  --attack: #e69a47;
+  --defense: #72c7d7;
+  --panel: rgb(8 18 22 / 88%);
+  --line: rgb(208 225 220 / 28%);
+}
+
+* { box-sizing: border-box; }
 html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #172733; }
+body { user-select: none; }
+#app { position: relative; }
 #game-canvas { width: 100%; height: 100%; display: block; }
-#ui-root { position: absolute; inset: 0; pointer-events: none; font-family: Inter, system-ui, sans-serif; color: #edf5f7; }
+#ui-root { position: absolute; inset: 0; pointer-events: none; color: var(--ink); text-shadow: 0 1px 2px #000; }
 button { pointer-events: auto; font: inherit; }
+
+.hud { position: absolute; inset: 0; pointer-events: none; }
+.hud__round {
+  position: absolute; top: clamp(18px, 3vh, 32px); left: 50%; width: 250px; min-height: 76px;
+  transform: translateX(-50%); display: grid;
+  grid-template: "phase phase" 18px "score timer" 44px / 1fr 72px;
+  align-items: center; padding: 7px 10px 5px;
+  background: linear-gradient(100deg, rgb(6 14 18 / 58%), rgb(15 27 30 / 88%), rgb(6 14 18 / 58%));
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  clip-path: polygon(7% 0, 93% 0, 100% 26%, 95% 100%, 5% 100%, 0 26%);
+  font-variant-numeric: tabular-nums;
+}
+.hud__phase { grid-area: phase; justify-self: center; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .2em; }
+.hud__score { grid-area: score; justify-self: center; min-width: 118px; font-size: 25px; font-weight: 900; letter-spacing: .03em; }
+.hud__timer { grid-area: timer; width: 62px; color: #f5deb7; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; font-weight: 800; text-align: center; }
+.hud__vitals, .hud__weapon {
+  position: absolute; bottom: clamp(24px, 4vh, 42px); min-width: 230px; padding: 11px 15px;
+  background: linear-gradient(90deg, var(--panel), rgb(8 18 22 / 38%));
+  border-left: 3px solid var(--attack); font-variant-numeric: tabular-nums;
+}
+.hud__vitals { left: clamp(22px, 3vw, 46px); display: grid; grid-template-columns: auto 55px; gap: 3px 12px; }
+.hud__label, .hud__weapon-name { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.hud__health { grid-column: 2; grid-row: 1; font-size: 27px; line-height: 1; text-align: right; }
+.hud__health-track { grid-column: 1 / -1; height: 5px; overflow: hidden; background: rgb(255 255 255 / 12%); }
+.hud__health-fill { display: block; width: var(--health, 100%); height: 100%; background: var(--attack); transition: width 120ms linear; }
+.hud__armor { grid-column: 1 / -1; color: var(--defense); font-size: 12px; font-weight: 800; }
+.hud__weapon { right: clamp(22px, 3vw, 46px); border-left-color: var(--defense); text-align: right; }
+.hud__weapon-name { display: block; min-height: 15px; white-space: nowrap; }
+.hud__ammo { display: block; min-width: 130px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 28px; line-height: 1.25; }
+.hud__objective {
+  position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%); min-width: 220px; padding: 8px 18px;
+  color: #ffe0a8; background: rgb(12 21 22 / 78%); border: 1px solid rgb(230 154 71 / 65%);
+  font-size: 13px; font-weight: 800; letter-spacing: .05em; text-align: center;
+}
+.hud__reticle { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); }
+.hud__reticle::before, .hud__reticle::after { content: ""; position: absolute; background: rgb(238 244 242 / 82%); box-shadow: 0 0 2px #000; }
+.hud__reticle::before { left: 7px; top: 1px; width: 2px; height: 14px; }
+.hud__reticle::after { left: 1px; top: 7px; width: 14px; height: 2px; }
+
+.mission-modal {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 32px; pointer-events: auto;
+  background: radial-gradient(circle at 50% 42%, rgb(21 41 46 / 68%), rgb(3 9 12 / 90%));
+  backdrop-filter: blur(3px);
+}
+.mission-modal[hidden] { display: none; }
+.mission-modal__panel {
+  width: min(430px, 100%); padding: 30px 34px 32px;
+  background: linear-gradient(145deg, rgb(15 30 34 / 96%), rgb(5 13 17 / 96%));
+  border: 1px solid var(--line); border-top: 3px solid var(--attack); box-shadow: 0 22px 65px rgb(0 0 0 / 42%);
+}
+.mission-modal__kicker { margin: 0 0 11px; color: var(--attack); font-size: 11px; font-weight: 900; letter-spacing: .18em; }
+.mission-modal h1 { margin: 0; font-size: clamp(28px, 5vw, 42px); letter-spacing: .04em; }
+.mission-modal__description { margin: 14px 0 19px; color: #c5cfcd; line-height: 1.65; }
+.mission-modal__controls { margin: 0 0 24px; color: var(--defense); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.mission-modal__actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.mission-modal__button {
+  min-height: 48px; padding: 11px 17px; border: 1px solid var(--line); color: var(--ink); background: rgb(255 255 255 / 7%);
+  font-weight: 900; letter-spacing: .08em; cursor: pointer;
+  transition: transform 100ms ease, background 100ms ease, border-color 100ms ease;
+}
+.mission-modal__button--primary { color: #131b1b; background: var(--attack); border-color: #ffc27c; text-shadow: none; }
+.mission-modal__button:hover { transform: translateY(-1px); border-color: #e7f1ef; }
+.mission-modal__button:active { transform: translateY(1px); }
+.mission-modal__button:focus-visible { outline: 3px solid var(--defense); outline-offset: 3px; }
+.startup-error { margin: 10vh auto; width: min(520px, calc(100% - 48px)); padding: 24px; pointer-events: auto; background: var(--panel); border: 1px solid #d77965; }
+
+@media (max-width: 760px) {
+  .hud__vitals, .hud__weapon { min-width: 185px; }
+  .hud__round { top: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }

@@ -1,0 +1,111 @@
+# Border Station vertical-slice verification
+
+Date: 2026-07-13 (Asia/Shanghai)
+
+## Result
+
+PASS for the scoped desktop vertical slice. The production preview starts behind a deliberate modal, runs one 60 Hz RAF composition, renders six command-driven actors, exposes snapshot-only HUD state, pauses on Escape/pointer-lock loss, and restarts without adding physics bodies, colliders, renderer geometries, listeners, or RAF loops.
+
+Known release note: Vite reports a 2,788.47 kB minified / 984.30 kB gzip JavaScript chunk, primarily Three.js + Rapier. Code splitting is deferred beyond this vertical slice.
+
+## Reference ledger
+
+| Reference | Loaded | Applied |
+| --- | --- | --- |
+| `threejs-game-ui-designer/references/ui-patterns.md` | yes | deliberate modal, authored HUD zones, fixed-width counters, gated debug state |
+| UI quality / HUD readability / responsive fit checklists | yes | start/pause/restart states, contrast, stable metrics, desktop fit, reduced motion |
+| `threejs-debug-profiler/references/debug-profile-checklists.md` | yes | context/loop/canvas/physics/restart triage and renderer diagnostics |
+| Scene debugging / performance profile checklists | yes | production canvas sizes, pixel probe, render stats, body/collider cleanup |
+| `threejs-qa-release/references/qa-release-checklists.md` | yes | production preview, interaction, console, pixel variance, restart evidence |
+| Visual verification / playtest QA / release checklists | yes | active screenshot, movement, pause/restart, build and preview evidence |
+
+## Automated verification
+
+RED evidence:
+
+- `npm test -- --run tests/ui/hud.test.ts tests/ui/start-screen.test.ts`: failed because both UI modules were absent.
+- `npm test -- --run tests/game.test.ts tests/input/keyboard-mouse.test.ts tests/world/world-runtime.test.ts`: failed for missing game composition, unimplemented number-key slots, and missing world diagnostics/removal.
+- `npm run test:e2e`: after Chromium installation, failed because `开始任务` was absent.
+- Restart regression: the extended browser test failed with renderer geometries increasing from 10 to 14 while bodies/colliders stayed 6/12. Actor meshes now dispose geometry/material resources in `WorldRuntime.removePlayer`.
+
+GREEN evidence:
+
+```text
+npm test -- --run tests/ui/hud.test.ts tests/ui/start-screen.test.ts
+2 files, 4 tests passed
+
+npm test -- --run tests/game.test.ts tests/input/keyboard-mouse.test.ts tests/world/world-runtime.test.ts tests/ui/hud.test.ts tests/ui/start-screen.test.ts
+5 files, 11 tests passed
+
+npm run test:e2e
+1 Playwright test passed, including nonblank center pixel and restart resource equality
+```
+
+Final fresh verification: `npm test -- --run && npm run typecheck && npm run build && npm run test:e2e` completed with 15 test files / 67 unit and integration tests passed, typecheck exit 0, production build exit 0, and 1 Playwright test passed.
+
+## Production browser evidence
+
+- URL: `http://127.0.0.1:4174/?debug=1` using `npm run preview` over the production build.
+- Browser: Playwright Chromium 149, headless, 1440×900, DPR 1.
+- Canvas CSS and drawing buffer: 1440×900 / 1440×900.
+- Active core loop: held `W` through freeze into live play; the human moved from `(-2, 1, 25)` to approximately `(-2, 0.849, 15.680)`. Phase advanced from `freeze` to `live`, and `phaseRemaining` reached 103.42 seconds.
+- Pixel variance: 25/25 sampled canvas pixels were nonblank with 7 unique RGBA values.
+- Browser audit: 0 console errors, 0 page errors, 0 failed network requests.
+- Pause/restart: Escape exposed `重新开始`; restart returned score to 0–0, phase to `freeze`, six actors, and one active RAF diagnostic.
+- Screenshot: [vertical-slice-active-1440x900.png](./vertical-slice-active-1440x900.png)
+
+### Active renderer diagnostics
+
+```json
+{
+  "calls": 9,
+  "triangles": 504,
+  "points": 0,
+  "lines": 0,
+  "geometries": 9,
+  "textures": 1
+}
+```
+
+### Physics and loop diagnostics
+
+```json
+{
+  "engine": "rapier",
+  "timestep": 0.01666666753590107,
+  "bodies": 6,
+  "colliders": 12,
+  "sensors": 0,
+  "ccdBodies": 0,
+  "fixedHz": 60,
+  "stepOrder": ["perception", "commands", "movement", "physics", "weapons", "bomb", "match", "snapshot"]
+}
+```
+
+Before and after restart, diagnostics stayed at 9 geometries, 1 texture, 6 bodies, and 12 colliders.
+
+## Checklist results
+
+- Deliberate start modal, not a landing page: pass.
+- Start, pause/resume, restart states: pass.
+- Pointer lock requested only inside start/resume/restart button gestures: pass by code inspection and browser interaction.
+- Pointer-lock loss / Escape pauses fixed updates: pass.
+- One active RAF and 60 Hz fixed update: pass via guarded `start()` and gated loop diagnostic.
+- Six actors (human attack + 2 attack bots + 3 defense bots): pass in state and physics diagnostics.
+- Both human and bots produce `PlayerCommand`: pass by composition and unit coverage.
+- Real Rapier actor IDs drive weapon hits: pass via `tests/world/world-runtime.test.ts` and `WeaponSystem` integration boundary.
+- HUD reads one composed game snapshot and owns no match rules: pass by code inspection/unit test.
+- HUD text contrast, stable numeric containers, 1440×900 overlap/clip review: pass by screenshot inspection.
+- Desktop-only scope: pass; no mobile/touch controls were added. Mobile-specific checks are not applicable.
+- Rifle/pistol number-key selection, fire, and reload: pass in command/weapon unit coverage; rifle state is visible in production HUD.
+- Bot reaction, line of sight, objective commands: pass in AI tests and composed actor motion.
+- Plant/defuse/explosion, elimination/timeout transitions: pass in BombSystem/MatchController production-boundary tests. The production browser pass exercised movement and pause/restart, not a complete bomb round.
+- Restart cleanup: pass in unit and browser regression checks.
+- Production build/base path/assets: pass at root-host preview; no external assets or licenses were added.
+
+## Residual risks
+
+- The active browser playtest covered the start → freeze → live movement → pause → restart path, not a two-minute complete round with human planting/defusing.
+- `preserveDrawingBuffer` is enabled so packaged QA can read pixels after compositing; it has a potential GPU performance cost, currently small at 9 calls / 504 triangles.
+- No FPS/frame-time trace was recorded; renderer and physics counts are low, but this is not a full performance profile.
+- The single JavaScript bundle is large and should be code-split in the performance/release milestone.

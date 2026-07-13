@@ -38,6 +38,7 @@ export interface WeaponRaycaster {
     origin: Vec3,
     direction: Vec3,
     maxDistance: number,
+    excludeEntityId?: EntityId,
   ): {
     entityId: EntityId | null;
     distance: number;
@@ -157,7 +158,7 @@ export class WeaponSystem {
       command.pitch,
       config.spreadRadians,
     );
-    const hit = this.world.raycast(cameraRay.origin, direction, config.range);
+    const hit = this.world.raycast(cameraRay.origin, direction, config.range, actorId);
     const point = hit?.point ?? endpoint(cameraRay.origin, direction, config.range);
     const events: WeaponEvent[] = [
       { type: 'shot', actorId, targetId: null, point },

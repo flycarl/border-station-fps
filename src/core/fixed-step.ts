@@ -15,4 +15,9 @@ export class FixedStepClock {
     }
     this.alpha = this.accumulator / this.step;
   }
+
+  reset(): void {
+    this.accumulator = 0;
+    this.alpha = 0;
+  }
 }
