@@ -37,8 +37,7 @@ export class NavGraph {
 
       const currentNode = this.requireNode(current);
       for (const neighborId of [...currentNode.neighbors].sort()) {
-        const neighbor = this.byId.get(neighborId);
-        if (!neighbor) continue;
+        const neighbor = this.requireNode(neighborId);
         const tentative = costs.get(current)! + distance(
           currentNode.position,
           neighbor.position,

@@ -13,15 +13,20 @@ const baseContext = () => ({
 
 it('does not fire at an occluded enemy', () => {
   const bot = new BotController('bot-1', 'defense', 7);
+  let canSeeCalls = 0;
   const command = bot.update({
     self: { position: { x: 0, y: 0, z: 0 }, yaw: 0, alive: true },
-    enemies: [{ id: 'p', position: { x: 0, y: 0, z: 10 }, alive: true }],
-    canSee: () => false,
+    enemies: [{ id: 'p', position: { x: 0, y: 0, z: -10 }, alive: true }],
+    canSee: () => {
+      canSeeCalls += 1;
+      return false;
+    },
     objective: 'hold',
-    targetNode: { x: 0, y: 0, z: 2 },
-    dt: 1 / 60,
+    targetNode: { x: 0, y: 0, z: -2 },
+    dt: 1,
   });
 
+  expect(canSeeCalls).toBe(1);
   expect(command.fire).toBe(false);
 });
 
@@ -44,16 +49,21 @@ it('requires both range and the 100-degree view cone to engage', () => {
   expect(rangeCommand.fire).toBe(false);
 });
 
-it('waits at least 0.25 seconds and fires by 0.55 seconds at a visible enemy', () => {
-  const bot = new BotController('bot-1', 'defense', 7);
-  const context = {
-    ...baseContext(),
-    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
-  };
+// The final seed produces a first PRNG sample of 0.9999999997671694.
+it.each([0, 1, 7, 653_637_408])(
+  'waits at least 0.25 seconds and fires by exactly 0.55 seconds for seed %i',
+  (seed) => {
+    const earlyBot = new BotController('bot-early', 'defense', seed);
+    const boundaryBot = new BotController('bot-boundary', 'defense', seed);
+    const context = {
+      ...baseContext(),
+      enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
+    };
 
-  expect(bot.update({ ...context, dt: 0.24 }).fire).toBe(false);
-  expect(bot.update({ ...context, dt: 0.32 }).fire).toBe(true);
-});
+    expect(earlyBot.update({ ...context, dt: 0.249_999 }).fire).toBe(false);
+    expect(boundaryBot.update({ ...context, dt: 0.55 }).fire).toBe(true);
+  },
+);
 
 it('returns a complete command and normalized movement toward a nav target', () => {
   const bot = new BotController('bot-1', 'attack', 7);

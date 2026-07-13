@@ -31,6 +31,26 @@ it('rejects unknown start and goal ids', () => {
   expect(() => graph.findPath('known', 'missing')).toThrow('Unknown nav node: missing');
 });
 
+it('rejects an unknown neighbor referenced by a visited node', () => {
+  const graph = new NavGraph([
+    {
+      id: 'start',
+      position: { x: 0, y: 0, z: 0 },
+      neighbors: ['missing'],
+      tags: [],
+    },
+    {
+      id: 'goal',
+      position: { x: 0, y: 0, z: -10 },
+      neighbors: [],
+      tags: ['site'],
+    },
+  ]);
+
+  expect(() => graph.findPath('start', 'goal'))
+    .toThrow('Unknown nav node: missing');
+});
+
 it('finds the nearest tagged node deterministically', () => {
   const graph = new NavGraph([
     { id: 'site-b', position: { x: 1, y: 0, z: 0 }, neighbors: [], tags: ['site'] },
