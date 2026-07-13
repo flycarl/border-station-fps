@@ -1,7 +1,11 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import type { Vec3 } from '../core/types';
-import { createBorderStationGraybox, type SolidDef } from './border-station-graybox';
+import {
+  BORDER_STATION_RAMP_PITCH,
+  createBorderStationGraybox,
+  type SolidDef,
+} from './border-station-graybox';
 
 export interface CameraPose {
   position: Vec3;
@@ -16,7 +20,6 @@ export interface RayHit {
 }
 
 const MAX_DEVICE_PIXEL_RATIO = 2;
-const RAMP_PITCH = -0.18;
 const PLAYER_HALF_HEIGHT = 0.5;
 const PLAYER_RADIUS = 0.35;
 const PLAYER_LINEAR_DAMPING = 0.8;
@@ -32,6 +35,11 @@ function colorForSolid(solid: SolidDef): number {
   if (solid.kind === 'cover') return 0x263b48;
   if (solid.kind === 'wall') return 0x425a68;
   return 0xb08b59;
+}
+
+export function applyCameraPose(camera: THREE.Object3D, cameraPose: CameraPose): void {
+  camera.position.set(cameraPose.position.x, cameraPose.position.y, cameraPose.position.z);
+  camera.rotation.set(cameraPose.pitch, cameraPose.yaw, 0);
 }
 
 export class WorldRuntime {
@@ -102,8 +110,7 @@ export class WorldRuntime {
   }
 
   render(cameraPose: CameraPose): void {
-    this.camera.position.set(cameraPose.position.x, cameraPose.position.y, cameraPose.position.z);
-    this.camera.rotation.set(cameraPose.pitch, cameraPose.yaw - Math.PI, 0);
+    applyCameraPose(this.camera, cameraPose);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -133,7 +140,7 @@ export class WorldRuntime {
       const geometry = new THREE.BoxGeometry(solid.size.x, solid.size.y, solid.size.z);
       const material = new THREE.MeshStandardMaterial({ color: colorForSolid(solid) });
       const mesh = new THREE.Mesh(geometry, material);
-      const pitch = solid.kind === 'ramp' ? RAMP_PITCH : 0;
+      const pitch = solid.kind === 'ramp' ? BORDER_STATION_RAMP_PITCH : 0;
       mesh.position.set(solid.center.x, solid.center.y, solid.center.z);
       mesh.rotation.set(pitch, solid.yaw, 0, 'YXZ');
       mesh.receiveShadow = true;

@@ -1,5 +1,7 @@
 import type { Team, Vec3 } from '../core/types';
 
+export const BORDER_STATION_RAMP_PITCH = 0.18;
+
 export interface SolidDef {
   id: string;
   center: Vec3;
@@ -41,7 +43,7 @@ export function createBorderStationGraybox(): GrayboxDefinition {
       },
       {
         id: 'ramp-main',
-        center: { x: 0, y: 1.3, z: -4 },
+        center: { x: 0, y: 0.918, z: -4 },
         size: { x: 7, y: 0.5, z: 13 },
         yaw: 0,
         kind: 'ramp',
@@ -76,12 +78,12 @@ export function createBorderStationGraybox(): GrayboxDefinition {
       },
     ],
     spawns: [
-      { id: 'a1', team: 'attack', position: { x: -2, y: 1, z: 25 }, yaw: Math.PI },
-      { id: 'a2', team: 'attack', position: { x: 0, y: 1, z: 25 }, yaw: Math.PI },
-      { id: 'a3', team: 'attack', position: { x: 2, y: 1, z: 25 }, yaw: Math.PI },
-      { id: 'd1', team: 'defense', position: { x: -2, y: 3, z: -24 }, yaw: 0 },
-      { id: 'd2', team: 'defense', position: { x: 0, y: 3, z: -24 }, yaw: 0 },
-      { id: 'd3', team: 'defense', position: { x: 2, y: 3, z: -24 }, yaw: 0 },
+      { id: 'a1', team: 'attack', position: { x: -2, y: 1, z: 25 }, yaw: 0 },
+      { id: 'a2', team: 'attack', position: { x: 0, y: 1, z: 25 }, yaw: 0 },
+      { id: 'a3', team: 'attack', position: { x: 2, y: 1, z: 25 }, yaw: 0 },
+      { id: 'd1', team: 'defense', position: { x: -2, y: 3, z: -24 }, yaw: Math.PI },
+      { id: 'd2', team: 'defense', position: { x: 0, y: 3, z: -24 }, yaw: Math.PI },
+      { id: 'd3', team: 'defense', position: { x: 2, y: 3, z: -24 }, yaw: Math.PI },
     ],
     bombSite: {
       center: { x: 0, y: 2, z: -18 },

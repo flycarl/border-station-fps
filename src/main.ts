@@ -7,7 +7,7 @@ if (!canvas) throw new Error('Missing #game-canvas');
 void WorldRuntime.create(canvas).then((world) =>
   world.render({
     position: { x: 0, y: 2, z: 24 },
-    yaw: Math.PI,
+    yaw: 0,
     pitch: 0,
   }),
 );
