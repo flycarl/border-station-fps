@@ -1,4 +1,5 @@
 import type { RoundPhase, Team } from '../core/types';
+import type { BombSnapshot } from './bomb-system';
 
 export interface MatchConfig {
   freeze: number;
@@ -14,6 +15,16 @@ export interface RoundFacts {
   bombPlanted: boolean;
   bombExploded: boolean;
   bombDefused: boolean;
+}
+
+export function bombFactsFrom(
+  bomb: BombSnapshot,
+): Pick<RoundFacts, 'bombPlanted' | 'bombExploded' | 'bombDefused'> {
+  return {
+    bombPlanted: bomb.state === 'planted' || bomb.state === 'defusing',
+    bombExploded: bomb.state === 'exploded',
+    bombDefused: bomb.state === 'defused',
+  };
 }
 
 export interface MatchSnapshot {
