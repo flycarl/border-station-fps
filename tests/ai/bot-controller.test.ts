@@ -164,6 +164,28 @@ it.each(['plant', 'defuse', 'retrieve'] as const)(
   },
 );
 
+it('resumes planting and interacts after an enemy leaves engagement', () => {
+  const bot = new BotController('carrier', 'attack', 7);
+  const engage = bot.update({
+    ...baseContext(),
+    objective: 'plant',
+    targetNode: { x: 1, y: 0, z: 0 },
+    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
+    dt: 0.2,
+  });
+  const resumed = bot.update({
+    ...baseContext(),
+    objective: 'plant',
+    targetNode: { x: 1, y: 0, z: 0 },
+    enemies: [],
+    dt: 1 / 60,
+  });
+
+  expect(engage.interact).toBe(false);
+  expect(resumed.interact).toBe(true);
+  expect(resumed.fire).toBe(false);
+});
+
 it('replays the same first command after resetting to the same seed', () => {
   const bot = new BotController('bot-1', 'defense', 11);
   const context = {

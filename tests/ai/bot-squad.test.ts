@@ -81,10 +81,62 @@ it('ignores dead defenders when selecting the closest defuser', () => {
   expect(commands.get('defense-3')?.interact).toBe(true);
 });
 
+it('routes the unique defuser through multiple nav nodes before interacting at the bomb', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'defense-1')!.position = { x: 0, y: 0, z: -10 };
+  views.find(({ id }) => id === 'defense-2')!.position = { x: 4, y: 0, z: -10 };
+  views.find(({ id }) => id === 'defense-3')!.position = { x: 6, y: 0, z: -10 };
+  const squad = new BotSquad(ids);
+  const context = {
+    round: 3,
+    phase: 'planted' as const,
+    actors: views,
+    bomb: bomb({
+      state: 'planted',
+      carrierId: null,
+      position: { x: -5, y: 0, z: 0 },
+    }),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  };
+
+  const enRoute = squad.sample(context);
+  expect(enRoute.get('defense-1')?.moveZ).toBe(-1);
+  expect(Math.abs(enRoute.get('defense-1')?.yaw ?? 0)).toBeCloseTo(Math.PI);
+  expect(enRoute.get('defense-1')?.interact).toBe(false);
+  expect(enRoute.get('defense-2')?.interact).toBe(false);
+  expect(enRoute.get('defense-3')?.interact).toBe(false);
+
+  views.find(({ id }) => id === 'defense-1')!.position = { x: -5, y: 0, z: 0 };
+  const arrived = squad.sample(context);
+  expect(arrived.get('defense-1')?.interact).toBe(true);
+  expect(arrived.get('defense-2')?.interact).toBe(false);
+  expect(arrived.get('defense-3')?.interact).toBe(false);
+});
+
 it('assigns only the closest living attack bot to retrieve a dropped bomb', () => {
   const views = actors();
   views.find(({ id }) => id === 'attack-1')!.position = { x: 0.4, y: 0, z: 0 };
   views.find(({ id }) => id === 'attack-2')!.position = { x: 1.2, y: 0, z: 0 };
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb({ state: 'dropped', carrierId: null, position: { x: 0, y: 0, z: 0 } }),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  expect(commands.get('attack-1')?.interact).toBe(true);
+  expect(commands.get('attack-2')?.interact).toBe(false);
+});
+
+it('breaks equal-distance retriever ties by actor id', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-1')!.position = { x: -1, y: 0, z: 0 };
+  views.find(({ id }) => id === 'attack-2')!.position = { x: 1, y: 0, z: 0 };
   const commands = new BotSquad(ids).sample({
     round: 3,
     phase: 'live',

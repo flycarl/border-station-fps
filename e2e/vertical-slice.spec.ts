@@ -460,7 +460,7 @@ test('composed timeout awards defense through MatchController', async ({ page })
 });
 
 test('surviving attackers recover and plant the human carrier bomb after human death', async ({ page }) => {
-  await page.goto('/?qa=1');
+  await page.goto('/?qa=1&debug=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
   const result = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
@@ -507,6 +507,7 @@ test('surviving attackers recover and plant the human carrier bomb after human d
       observedBombStates: [...observedBombStates],
       maximumBotDisplacement,
       viewActorId: qa.viewActorId,
+      viewWeaponVisible: window.__THREE_GAME_DIAGNOSTICS__!.viewWeapon?.visible ?? null,
     };
   });
 
@@ -516,6 +517,7 @@ test('surviving attackers recover and plant the human carrier bomb after human d
   expect(result.observedBombStates).toContain('carried');
   expect(result.planted.state).toBe('planted');
   expect(result.viewActorId).toBe('attack-bot-1');
+  expect(result.viewWeaponVisible).toBe(false);
 });
 
 test('composed WeaponSystem elimination awards attack', async ({ page }) => {

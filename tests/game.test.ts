@@ -77,6 +77,16 @@ it('follows the nearest living attacker after the human dies', () => {
   expect(selectViewActor(actors, 'attack-human')).toBe('attack-bot-2');
 });
 
+it('breaks equal-distance spectator ties by actor id', () => {
+  const actors = [
+    actor('attack-human', 'attack', { x: 0, y: 1, z: 10 }, false),
+    actor('attack-bot-2', 'attack', { x: 2, y: 1, z: 10 }),
+    actor('attack-bot-1', 'attack', { x: -2, y: 1, z: 10 }),
+  ];
+
+  expect(selectViewActor(actors, 'attack-human')).toBe('attack-bot-1');
+});
+
 it('follows a living defender when no attackers survive', () => {
   const actors = [
     actor('attack-human', 'attack', { x: 0, y: 1, z: 10 }, false),

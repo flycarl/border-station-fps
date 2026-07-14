@@ -172,7 +172,7 @@ export class BotSquad {
     context: BotSquadContext,
   ): Vec3 {
     if (bot.team === 'defense' && objective === 'defuse') {
-      return context.bomb.position;
+      return routeToward(context.nav, actor.position, context.bomb.position);
     }
     if (objective === 'retrieve') {
       return routeToward(context.nav, actor.position, context.bomb.position);
