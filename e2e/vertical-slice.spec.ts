@@ -175,24 +175,32 @@ test('live bots engage at expanded range through the clear corner lane', async (
   const engagement = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
     qa.advance(721);
-    qa.place('attack-human', { x: 14, y: 1, z: 0 });
+    qa.place('attack-human', { x: 14, y: 1, z: -5 });
     qa.place('attack-bot-1', { x: -14, y: 1, z: -40 });
     qa.place('attack-bot-2', { x: -13, y: 1, z: -40 });
     qa.place('defense-bot-1', { x: 14, y: 1, z: 35 });
     qa.place('defense-bot-2', { x: -14, y: 1, z: -35 });
     qa.place('defense-bot-3', { x: -13, y: 1, z: -35 });
     qa.advance(1);
+    const human = qa.state.actors.find(({ id }) => id === 'attack-human')!;
+    const defender = qa.state.actors.find(({ id }) => id === 'defense-bot-1')!;
     const clearLane = qa.canActorsSee('defense-bot-1', 'attack-human');
+    const separation = Math.hypot(
+      human.position.x - defender.position.x,
+      human.position.y - defender.position.y,
+      human.position.z - defender.position.z,
+    );
     qa.useLiveCommands();
     const samples = [];
     for (let tick = 0; tick < 30; tick++) {
       qa.advance(1);
       samples.push(qa.actorCommand('defense-bot-1'));
     }
-    return { clearLane, samples };
+    return { clearLane, samples, separation };
   });
 
   expect(engagement.clearLane).toBe(true);
+  expect(engagement.separation).toBeGreaterThanOrEqual(40);
   expect(engagement.samples.some((command) => command.fire)).toBe(true);
   expect(engagement.samples.some((command) => Math.abs(command.moveX) > 0)).toBe(true);
   expect(engagement.samples.some((command) => command.moveZ < 0)).toBe(true);
