@@ -19,6 +19,7 @@ export interface FirstPersonWeaponDiagnostics {
 }
 
 const BASE_POSITION = new THREE.Vector3(0.36, -0.32, -0.68);
+const BASE_ROTATION = new THREE.Euler(-0.035, -0.045, -0.025, 'YXZ');
 const RIFLE_LOCAL_POSITION = new THREE.Vector3(0, 0, 0);
 const PISTOL_LOCAL_POSITION = new THREE.Vector3(0.02, -0.02, -0.06);
 const WALK_SWAY_RATE = 7.5;
@@ -156,12 +157,20 @@ export class FirstPersonWeaponRig {
     this.rifle.rotation.set(0, 0, 0);
     this.pistol.position.copy(PISTOL_LOCAL_POSITION);
     this.pistol.rotation.set(0, 0, 0);
-    if (!state.alive) return;
+    if (!state.alive) {
+      this.time = 0;
+      this.movementBlend = 0;
+      this.recoil = 0;
+      this.reloadBlend = 0;
+      this.root.position.copy(BASE_POSITION);
+      this.root.rotation.copy(BASE_ROTATION);
+      return;
+    }
 
     const movementTarget = state.paused ? 0 : Math.min(1, Math.max(0, state.movement));
     this.movementBlend += (movementTarget - this.movementBlend) * (1 - Math.exp(-step * 8));
     if (!state.paused && this.movementBlend > 0.01) this.time += step * WALK_SWAY_RATE;
-    if (state.fired) {
+    if (state.fired && step > 0) {
       const kick = state.weaponId === 'vanguard-rifle' ? 0.72 : 0.52;
       this.recoil = Math.min(1.8, this.recoil + kick);
     }
@@ -178,7 +187,7 @@ export class FirstPersonWeaponRig {
       BASE_POSITION.z,
     );
     this.root.rotation.set(
-      -0.035 - this.recoil * 0.07 + this.reloadBlend * 0.18,
+      -0.035 + this.recoil * 0.07 + this.reloadBlend * 0.18,
       -0.045 + swayX * 0.8,
       -0.025 - this.reloadBlend * 0.18,
     );
@@ -186,7 +195,7 @@ export class FirstPersonWeaponRig {
     for (const weapon of [this.rifle, this.pistol]) {
       weapon.position.z += this.recoil * 0.09;
       weapon.position.y -= this.recoil * 0.025;
-      weapon.rotation.x = this.recoil * -0.08;
+      weapon.rotation.x = this.recoil * 0.08;
       weapon.rotation.z = -this.reloadBlend * 0.65;
     }
   }

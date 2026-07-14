@@ -101,3 +101,50 @@ it('accumulates recoil across shots and recovers toward the authored pose', () =
 
   expect(rig.diagnostics().weaponOffset.z).toBeLessThan(firstKick * 0.1);
 });
+
+it('kicks the muzzle upward and recovers to the neutral pitch', () => {
+  const rig = new FirstPersonWeaponRig();
+  rig.update(state(), 1 / 60);
+  const neutralWeaponPitch = rig.diagnostics().weaponRotation.x;
+  const neutralRootPitch = rig.root.rotation.x;
+
+  rig.update(state({ fired: true }), 1 / 60);
+
+  expect(rig.diagnostics().weaponRotation.x).toBeGreaterThan(neutralWeaponPitch);
+  expect(rig.root.rotation.x).toBeGreaterThan(neutralRootPitch);
+
+  for (let frame = 0; frame < 60; frame += 1) rig.update(state(), 1 / 60);
+
+  expect(rig.diagnostics().weaponRotation.x).toBeCloseTo(neutralWeaponPitch, 3);
+  expect(rig.root.rotation.x).toBeCloseTo(neutralRootPitch, 3);
+});
+
+it('resets animation state on death so respawn starts from the neutral pose', () => {
+  const rig = new FirstPersonWeaponRig();
+  const freshRig = new FirstPersonWeaponRig();
+  rig.update(state({ movement: 1, fired: true, reloading: true }), 0.1);
+
+  rig.update(state({ alive: false }), 1 / 60);
+
+  expect(rig.diagnostics().rootPosition).toEqual({ x: 0.36, y: -0.32, z: -0.68 });
+  expect(rig.diagnostics().weaponOffset).toEqual({ x: 0, y: 0, z: 0 });
+  expect(rig.diagnostics().weaponRotation).toEqual({ x: 0, y: 0, z: 0 });
+
+  rig.update(state(), 1 / 60);
+  freshRig.update(state(), 1 / 60);
+
+  expect(rig.diagnostics()).toEqual(freshRig.diagnostics());
+  expect(rig.root.rotation.toArray()).toEqual(freshRig.root.rotation.toArray());
+});
+
+it('does not add another recoil impulse during a zero-step render update', () => {
+  const rig = new FirstPersonWeaponRig();
+  rig.update(state({ fired: true }), 1 / 60);
+  const fixedStepPose = rig.diagnostics();
+  const fixedStepRootPitch = rig.root.rotation.x;
+
+  rig.update(state({ fired: true }), 0);
+
+  expect(rig.diagnostics()).toEqual(fixedStepPose);
+  expect(rig.root.rotation.x).toBe(fixedStepRootPitch);
+});

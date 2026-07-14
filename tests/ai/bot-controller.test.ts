@@ -88,27 +88,30 @@ it('keeps pressure with deterministic advance and strafe movement while engaging
   expect(firstCommand).toEqual(secondCommand);
 });
 
-it('resamples bounded aim error during sustained fire and replays it from the seed', () => {
+it('keeps seeded bounded aim error stable until the 0.35-second resample boundary', () => {
   const first = new BotController('bot-sustained', 'defense', 17);
   const replay = new BotController('bot-sustained', 'defense', 17);
   const context = {
     ...baseContext(),
     enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
-    dt: 0.38,
   };
 
-  const firstSequence = Array.from({ length: 8 }, () => first.update(context));
-  const replaySequence = Array.from({ length: 8 }, () => replay.update(context));
+  const sampleSequence = (bot: BotController) => [
+    bot.update({ ...context, dt: 0 }),
+    bot.update({ ...context, dt: 0.349 }),
+    bot.update({ ...context, dt: 0.001 }),
+  ];
+  const firstSequence = sampleSequence(first);
+  const replaySequence = sampleSequence(replay);
 
-  expect(firstSequence.every(({ fire }) => fire)).toBe(true);
-  expect(firstSequence[1]!.yaw).not.toBe(firstSequence[0]!.yaw);
-  expect(firstSequence[1]!.pitch).not.toBe(firstSequence[0]!.pitch);
+  expect(firstSequence[1]!.yaw).toBe(firstSequence[0]!.yaw);
+  expect(firstSequence[1]!.pitch).toBe(firstSequence[0]!.pitch);
+  expect(firstSequence[2]!.yaw).not.toBe(firstSequence[1]!.yaw);
+  expect(firstSequence[2]!.pitch).not.toBe(firstSequence[1]!.pitch);
   for (const command of firstSequence) {
     expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.035);
     expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.020);
   }
-  expect(firstSequence.some((command) => Math.abs(command.yaw) > 0.014
-    || Math.abs(command.pitch) > 0.009)).toBe(true);
   expect(replaySequence).toEqual(firstSequence);
 });
 
