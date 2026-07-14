@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
+import { createBorderStationGraybox } from '../../src/world/border-station-graybox';
 import { WorldRuntime } from '../../src/world/world-runtime';
+
+const mainRamp = createBorderStationGraybox().solids.find((solid) => solid.id === 'ramp-main')!;
 
 it('returns the registered player actor ID when a ray hits its Rapier capsule', async () => {
   const runtime = await WorldRuntime.createHeadless();
@@ -126,7 +129,7 @@ it('does not report an airborne actor as supported at its jump apex', async () =
 
 it.each([
   ['floor', { x: 8, y: 0.85, z: 20 }],
-  ['ramp', { x: 0, y: 2.25, z: -4 }],
+  ['ramp', { x: mainRamp.center.x, y: mainRamp.center.y + 1.5, z: mainRamp.center.z }],
 ] as const)('reports %s support from a walkable map surface', async (_surface, position) => {
   const runtime = await WorldRuntime.createHeadless(true);
   try {

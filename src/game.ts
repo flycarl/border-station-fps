@@ -147,6 +147,7 @@ export class Game {
   private hasEntered = false;
   private disposed = false;
   private qaCommands: Map<EntityId, PlayerCommand> | null = null;
+  private humanWeaponFired = false;
 
   private constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -158,6 +159,7 @@ export class Game {
     this.nav = new NavGraph(this.map.navNodes);
     this.botSquad = new BotSquad(this.roster.filter(({ human }) => !human).map(({ id }) => id));
     this.weaponSystem = this.createWeaponSystem();
+    this.humanWeaponFired = false;
     this.spawnActors();
     this.currentSnapshot = this.composeSnapshot();
     this.startScreen = new StartScreen(
@@ -189,6 +191,7 @@ export class Game {
     this.match = new MatchController(MATCH_CONFIG);
     this.bomb = new BombSystem(BOMB_CONFIG, 'attack-human');
     this.weaponSystem = this.createWeaponSystem();
+    this.humanWeaponFired = false;
     this.botSquad.reset(1);
     this.spawnActors();
     this.clock.reset();
@@ -241,6 +244,7 @@ export class Game {
     this.world.step(dt);
     this.updatePerception();
     this.updateWeapons(dt);
+    this.updateFirstPersonWeapon(dt);
 
     const actions = [...this.actors.values()].map(({ definition, state }) => ({
       actorId: state.id,
@@ -310,13 +314,33 @@ export class Game {
   }
 
   private updateWeapons(dt: number): void {
+    this.humanWeaponFired = false;
     for (const actor of this.actors.values()) {
       const command = this.commands.get(actor.state.id) ?? idleCommand();
-      this.weaponSystem.update(actor.state.id, command, {
+      const events = this.weaponSystem.update(actor.state.id, command, {
         origin: this.eyePosition(actor.state.position),
       }, dt);
+      if (actor.state.id === 'attack-human'
+        && events.some((event) => event.type === 'shot')) {
+        this.humanWeaponFired = true;
+      }
     }
     this.reconcileActorParticipation();
+  }
+
+  private updateFirstPersonWeapon(dt: number): void {
+    const human = this.actors.get('attack-human')?.state;
+    if (!human) return;
+    const command = this.commands.get(human.id) ?? idleCommand();
+    const selected = command.slot === 2 ? human.sidearm : human.primary;
+    this.world.updateFirstPersonWeapon({
+      weaponId: selected.id,
+      movement: Math.min(1, Math.hypot(command.moveX, command.moveZ)),
+      fired: this.humanWeaponFired,
+      reloading: selected.reloadEndsAt !== null,
+      alive: human.alive,
+      paused: this.paused,
+    }, dt);
   }
 
   private reconcileActorParticipation(): void {
@@ -379,6 +403,7 @@ export class Game {
     this.commands.clear();
     this.bomb = new BombSystem(BOMB_CONFIG, 'attack-human');
     this.weaponSystem = this.createWeaponSystem();
+    this.humanWeaponFired = false;
     this.botSquad.reset(this.match.snapshot().round);
     this.spawnActors();
   }
@@ -422,6 +447,7 @@ export class Game {
     if (!human) return;
     this.currentSnapshot = { ...this.currentSnapshot, paused: this.paused };
     this.hud.render(this.currentSnapshot);
+    this.updateFirstPersonWeapon(0);
     this.world.render({
       position: this.eyePosition(human.position),
       yaw: human.yaw,

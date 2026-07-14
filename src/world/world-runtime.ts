@@ -2,6 +2,10 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import type { EntityId, Vec3 } from '../core/types';
 import {
+  FirstPersonWeaponRig,
+  type FirstPersonWeaponState,
+} from '../weapons/first-person-weapon';
+import {
   BORDER_STATION_RAMP_PITCH,
   createBorderStationGraybox,
   type SolidDef,
@@ -75,6 +79,7 @@ export class WorldRuntime {
   private readonly inactivePlayers = new Set<EntityId>();
   private readonly playerMeshes = new Map<EntityId, THREE.Mesh>();
   private readonly supportColliderHandles = new Set<number>();
+  private firstPersonWeapon: FirstPersonWeaponRig | null = null;
   private disposed = false;
 
   private constructor(
@@ -101,6 +106,10 @@ export class WorldRuntime {
     camera.rotation.order = 'YXZ';
     const physicsWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
     const runtime = new WorldRuntime(canvas, renderer, scene, camera, physicsWorld);
+
+    runtime.firstPersonWeapon = new FirstPersonWeaponRig();
+    camera.add(runtime.firstPersonWeapon.root);
+    scene.add(camera);
 
     runtime.buildGraybox();
     runtime.addLighting();
@@ -210,6 +219,10 @@ export class WorldRuntime {
     this.physicsWorld.step();
   }
 
+  updateFirstPersonWeapon(state: FirstPersonWeaponState, dt: number): void {
+    this.firstPersonWeapon?.update(state, dt);
+  }
+
   raycast(
     origin: Vec3,
     direction: Vec3,
@@ -305,6 +318,8 @@ export class WorldRuntime {
     for (const entityId of [...this.playerBodies.keys()]) this.removePlayer(entityId);
     for (const geometry of this.disposableGeometries) geometry.dispose();
     for (const material of this.disposableMaterials) material.dispose();
+    this.firstPersonWeapon?.dispose();
+    this.firstPersonWeapon = null;
     this.physicsWorld.free();
     this.renderer?.dispose();
   }
