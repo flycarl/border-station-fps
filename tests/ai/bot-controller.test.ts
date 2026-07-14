@@ -112,6 +112,8 @@ it('keeps seeded bounded aim error stable until the 0.35-second resample boundar
     expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.035);
     expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.020);
   }
+  expect(firstSequence.some((command) => Math.abs(command.yaw) > 0.014
+    || Math.abs(command.pitch) > 0.009)).toBe(true);
   expect(replaySequence).toEqual(firstSequence);
 });
 
