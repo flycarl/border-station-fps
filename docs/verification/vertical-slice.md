@@ -1,10 +1,18 @@
 # Border Station vertical-slice verification
 
-Date: 2026-07-13 (Asia/Shanghai)
+Date: 2026-07-14 (Asia/Shanghai)
 
 ## Result
 
 PASS for the scoped desktop vertical slice. The production preview starts behind a deliberate modal, resumes only after confirmed pointer lock, runs one 60 Hz RAF composition, uses Rapier support queries for jumping, renders six command-driven actors, exposes snapshot-only HUD state, pauses on Escape/pointer-lock loss, and restarts without adding physics bodies, colliders, renderer geometries, listeners, or RAF loops.
+
+## Expanded combat pass
+
+The July 14 pass expands the arena from 22×64 m to 34×94 m, separates attack and defense spawns by 75 m, adds a second ramp, six cover solids, and branched left/right navigation lanes. Bot perception now reaches 42 m across a 120-degree cone; deterministic reaction time is 0.16–0.38 seconds, aim error is reduced, and bots advance/strafe while engaging beyond 15 m.
+
+The player now has a camera-mounted procedural rifle and pistol with named receiver/slide, handguard, barrel, muzzle, magazine, stock/grip, sight, and hand meshes. The rig switches with weapon slot, hides on death, and responds to movement, firing, reloading, and pause state. It is visual-only and does not add physics colliders or raycast targets.
+
+Fresh verification passed with 16 Vitest files / 80 tests, TypeScript no-emit, Vite production build, and all 8 Playwright Chromium scenarios. The updated browser suite uses the expanded bomb site and unobstructed combat lanes, reports zero page/console/network errors, and verifies restart resource counts by equality rather than an obsolete fixed collider count. Built JS is 2,799.16 kB minified / 987.61 kB gzip (size warning only).
 
 Known release note: Vite reports a 2,790.87 kB minified / 984.97 kB gzip JavaScript chunk, primarily Three.js + Rapier. Code splitting is deferred beyond this vertical slice.
 
