@@ -29,6 +29,21 @@ import {
 const FIXED_STEP = 1 / 60;
 const EYE_HEIGHT = 0.65;
 
+export function calculateTracerOrigin(eye: Vec3, yaw: number, pitch: number): Vec3 {
+  const cosPitch = Math.cos(pitch);
+  const forward = {
+    x: -Math.sin(yaw) * cosPitch,
+    y: Math.sin(pitch),
+    z: -Math.cos(yaw) * cosPitch,
+  };
+  const right = { x: Math.cos(yaw), z: -Math.sin(yaw) };
+  return {
+    x: eye.x + forward.x * 0.42 + right.x * 0.18,
+    y: eye.y + forward.y * 0.42 - 0.12,
+    z: eye.z + forward.z * 0.42 + right.z * 0.18,
+  };
+}
+
 export const STEP_ORDER = [
   'perception',
   'commands',
@@ -323,6 +338,18 @@ export class Game {
       const events = this.weaponSystem.update(actor.state.id, command, {
         origin: this.eyePosition(actor.state.position),
       }, dt);
+      const shot = events.find((event) => event.type === 'shot');
+      if (shot) {
+        this.world.spawnBulletTracer(
+          calculateTracerOrigin(
+            this.eyePosition(actor.state.position),
+            actor.state.yaw,
+            actor.state.pitch,
+          ),
+          shot.point,
+          actor.state.team,
+        );
+      }
       if (actor.state.id === 'attack-human'
         && events.some((event) => event.type === 'shot')) {
         this.humanWeaponFired = true;
@@ -422,9 +449,19 @@ export class Game {
     const selected = this.commands.get('attack-human')?.slot === 2
       ? human?.sidearm
       : human?.primary;
+    const actorStates = [...this.actors.values()];
+    const floor = this.map.solids.find(({ id }) => id === 'floor');
+    const radarBounds = floor ? {
+      minX: floor.center.x - floor.size.x / 2,
+      maxX: floor.center.x + floor.size.x / 2,
+      minZ: floor.center.z - floor.size.z / 2,
+      maxZ: floor.center.z + floor.size.z / 2,
+    } : { minX: -17, maxX: 17, minZ: -47, maxZ: 47 };
     return {
       attackScore: match.attackScore,
       defenseScore: match.defenseScore,
+      attackersAlive: actorStates.filter(({ state }) => state.team === 'attack' && state.alive).length,
+      defendersAlive: actorStates.filter(({ state }) => state.team === 'defense' && state.alive).length,
       phase: match.phase,
       phaseRemaining: match.phase === 'planted' ? bomb.remaining : match.phaseRemaining,
       health: human?.health ?? 0,
@@ -433,9 +470,22 @@ export class Game {
       magazine: selected?.magazine ?? 0,
       reserve: selected?.reserve ?? 0,
       bombState: bomb.state,
+      radar: {
+        bounds: radarBounds,
+        bombSite: { x: this.map.bombSite.center.x, z: this.map.bombSite.center.z },
+        contacts: actorStates.map(({ definition, state }) => ({
+          id: state.id,
+          team: state.team,
+          x: state.position.x,
+          z: state.position.z,
+          yaw: state.yaw,
+          human: definition.human,
+          alive: state.alive,
+        })),
+      },
       round: match.round,
       paused: this.paused,
-      actors: [...this.actors.values()].map(({ state }) => ({
+      actors: actorStates.map(({ state }) => ({
         id: state.id,
         team: state.team,
         position: { ...state.position },

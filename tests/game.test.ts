@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createGameRoster, STEP_ORDER } from '../src/game';
+import { calculateTracerOrigin, createGameRoster, STEP_ORDER } from '../src/game';
 
 it('composes one fixed step in the required deterministic order', () => {
   expect(STEP_ORDER).toEqual([
@@ -23,4 +23,11 @@ it('creates one human attacker, two attack bots, and three defense bots', () => 
   ]);
   expect(roster.filter(({ team, human }) => team === 'attack' && !human)).toHaveLength(2);
   expect(roster.filter(({ team, human }) => team === 'defense' && !human)).toHaveLength(3);
+});
+
+it('starts visual tracers in front of and beside the camera at the muzzle', () => {
+  const origin = calculateTracerOrigin({ x: 0, y: 1.65, z: 0 }, 0, 0);
+  expect(origin.x).toBeCloseTo(0.18);
+  expect(origin.y).toBeCloseTo(1.53);
+  expect(origin.z).toBeCloseTo(-0.42);
 });

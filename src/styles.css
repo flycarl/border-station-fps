@@ -19,9 +19,9 @@ button { pointer-events: auto; font: inherit; }
 
 .hud { position: absolute; inset: 0; pointer-events: none; }
 .hud__round {
-  position: absolute; top: clamp(18px, 3vh, 32px); left: 50%; width: 250px; min-height: 76px;
+  position: absolute; top: clamp(18px, 3vh, 32px); left: 50%; width: min(520px, calc(100vw - 40px)); min-height: 76px;
   transform: translateX(-50%); display: grid;
-  grid-template: "phase phase" 18px "score timer" 44px / 1fr 72px;
+  grid-template: "phase phase phase phase" 18px "attack score timer defense" 44px / minmax(76px, 1fr) 120px 72px minmax(76px, 1fr);
   align-items: center; padding: 7px 10px 5px;
   background: linear-gradient(100deg, rgb(6 14 18 / 58%), rgb(15 27 30 / 88%), rgb(6 14 18 / 58%));
   border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
@@ -31,6 +31,42 @@ button { pointer-events: auto; font: inherit; }
 .hud__phase { grid-area: phase; justify-self: center; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .2em; }
 .hud__score { grid-area: score; justify-self: center; min-width: 118px; font-size: 25px; font-weight: 900; letter-spacing: .03em; }
 .hud__timer { grid-area: timer; width: 62px; color: #f5deb7; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; font-weight: 800; text-align: center; }
+.hud__alive { font-size: 13px; font-weight: 900; letter-spacing: .06em; text-align: center; white-space: nowrap; }
+.hud__alive--attack { grid-area: attack; color: var(--attack); }
+.hud__alive--defense { grid-area: defense; color: var(--defense); }
+.hud__radar {
+  position: absolute; top: clamp(18px, 3vh, 32px); right: clamp(18px, 2.4vw, 36px); width: 184px; padding: 9px;
+  background: linear-gradient(145deg, rgb(6 15 19 / 92%), rgb(14 31 36 / 78%));
+  border: 1px solid rgb(194 224 224 / 32%); border-top: 2px solid var(--defense);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 24%); font-variant-numeric: tabular-nums;
+}
+.hud__radar-heading, .hud__radar-legend { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 9px; font-weight: 900; letter-spacing: .12em; }
+.hud__radar-heading { margin: 0 2px 7px; }
+.hud__radar-heading span:last-child { color: #f4e0bc; font-size: 11px; }
+.hud__radar-plot {
+  position: relative; width: 100%; aspect-ratio: 34 / 70; overflow: hidden;
+  background:
+    linear-gradient(90deg, transparent 49.5%, rgb(193 222 221 / 12%) 49.5% 50.5%, transparent 50.5%),
+    repeating-linear-gradient(0deg, transparent 0 23%, rgb(193 222 221 / 8%) 23% 24%),
+    rgb(13 35 40 / 88%);
+  border: 1px solid rgb(194 224 224 / 26%);
+  clip-path: polygon(5% 0, 95% 0, 100% 3%, 100% 97%, 95% 100%, 5% 100%, 0 97%, 0 3%);
+}
+.hud__radar-site, .hud__radar-contact { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.hud__radar-site {
+  display: grid; place-items: center; width: 22px; height: 22px; color: #ffe4af; background: rgb(230 154 71 / 18%);
+  border: 1px solid rgb(230 154 71 / 82%); font-size: 10px; font-weight: 900;
+}
+.hud__radar-contact {
+  z-index: 2; width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 78%);
+  box-shadow: 0 0 7px currentColor; transform: translate(-50%, -50%) rotate(var(--heading));
+}
+.hud__radar-contact--attack { color: var(--attack); background: var(--attack); }
+.hud__radar-contact--defense { color: var(--defense); background: var(--defense); }
+.hud__radar-contact--human { width: 11px; height: 14px; border: 0; border-radius: 0; background: #fff3ce; clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%); }
+.hud__radar-legend { margin: 7px 2px 0; letter-spacing: .02em; }
+.hud__radar-legend span:first-child { color: var(--attack); }
+.hud__radar-legend span:last-child { color: var(--defense); }
 .hud__vitals, .hud__weapon {
   position: absolute; bottom: clamp(24px, 4vh, 42px); min-width: 230px; padding: 11px 15px;
   background: linear-gradient(90deg, var(--panel), rgb(8 18 22 / 38%));
@@ -86,5 +122,6 @@ button { pointer-events: auto; font: inherit; }
 @media (max-width: 760px) {
   .hud__vitals, .hud__weapon { min-width: 185px; }
   .hud__round { top: 12px; }
+  .hud__radar { top: 100px; right: 12px; width: 142px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }

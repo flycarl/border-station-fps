@@ -127,6 +127,25 @@ it('does not report an airborne actor as supported at its jump apex', async () =
   }
 });
 
+it('advances and expires cosmetic bullet tracers with the world step', async () => {
+  const runtime = await WorldRuntime.createHeadless();
+  try {
+    runtime.spawnBulletTracer(
+      { x: 0, y: 1, z: 0 },
+      { x: 0, y: 1, z: -12 },
+      'attack',
+    );
+    expect(runtime.diagnostics().tracers).toBe(1);
+
+    runtime.step(0.06);
+    expect(runtime.diagnostics().tracers).toBe(1);
+    runtime.step(0.06);
+    expect(runtime.diagnostics().tracers).toBe(0);
+  } finally {
+    runtime.dispose();
+  }
+});
+
 it.each([
   ['floor', { x: 8, y: 0.85, z: 20 }],
   ['ramp', { x: mainRamp.center.x, y: mainRamp.center.y + 1.5, z: mainRamp.center.z }],

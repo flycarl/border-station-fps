@@ -179,6 +179,64 @@ test('weapon switching, recoil, reload, and active-play capture use the game bri
   await page.screenshot({ path: screenshotPath });
 });
 
+test('combat HUD and visible bullet tracers reflect authoritative play state', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    let locked: Element | null = null;
+    Object.defineProperty(document, 'pointerLockElement', {
+      configurable: true,
+      get: () => locked,
+    });
+    Object.defineProperty(HTMLCanvasElement.prototype, 'requestPointerLock', {
+      configurable: true,
+      value: function requestPointerLock() {
+        locked = this;
+        document.dispatchEvent(new Event('pointerlockchange'));
+        return Promise.resolve();
+      },
+    });
+  });
+  await page.goto('/?qa=1&debug=1');
+  await page.getByRole('button', { name: '开始任务' }).click();
+  const activeShot = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.advance(721);
+    qa.place('attack-human', { x: 14, y: 1, z: 10 });
+    qa.place('defense-bot-1', { x: 14, y: 1, z: 4 });
+    for (const id of ['attack-bot-1', 'attack-bot-2']) qa.place(id, { x: -14, y: 1, z: 35 });
+    for (const id of ['defense-bot-2', 'defense-bot-3']) qa.place(id, { x: -14, y: 1, z: -35 });
+    qa.command('attack-human', { fire: true, slot: 1, yaw: 0, pitch: 0 });
+    qa.advance(3);
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    return {
+      tracers: window.__THREE_GAME_DIAGNOSTICS__!.physics.tracers,
+      state: qa.state,
+    };
+  });
+
+  expect(activeShot.tracers).toBeGreaterThan(0);
+  expect(activeShot.state).toMatchObject({ attackersAlive: 3, defendersAlive: 3 });
+  expect(activeShot.state.radar.contacts.filter(({ alive }) => alive)).toHaveLength(6);
+  await expect(page.locator('[data-testid="attackers-alive"]')).toHaveText('攻方 3');
+  await expect(page.locator('[data-testid="defenders-alive"]')).toHaveText('守方 3');
+  await expect(page.locator('.hud__radar-contact')).toHaveCount(6);
+  await expect(page.locator('.hud__radar-contact--human')).toHaveCount(1);
+  await page.locator('.mission-modal').evaluate((element) => {
+    (element as HTMLElement).style.display = 'none';
+  });
+  const screenshotPath = process.env.CAPTURE_VERIFICATION === '1'
+    ? 'docs/verification/combat-awareness-pass-1440x900.png'
+    : testInfo.outputPath('combat-awareness-pass-1440x900.png');
+  await page.screenshot({ path: screenshotPath });
+
+  const expired = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.command('attack-human', { fire: false, slot: 1 });
+    qa.advance(8);
+    return window.__THREE_GAME_DIAGNOSTICS__!.physics.tracers;
+  });
+  expect(expired).toBe(0);
+});
+
 test('keeps play paused when pointer lock is rejected and resumes only after confirmation', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(HTMLCanvasElement.prototype, 'requestPointerLock', {
@@ -260,6 +318,7 @@ test('composed WeaponSystem elimination awards attack', async ({ page }) => {
     return qa.state;
   });
   expect(state).toMatchObject({ phase: 'result', attackScore: 1 });
+  expect(state).toMatchObject({ attackersAlive: 3, defendersAlive: 0 });
   expect(state.actors.filter((actor) => actor.team === 'defense' && actor.alive)).toHaveLength(0);
 });
 

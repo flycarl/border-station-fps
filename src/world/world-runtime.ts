@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import type { EntityId, Vec3 } from '../core/types';
+import type { EntityId, Team, Vec3 } from '../core/types';
+import { BulletTracerSystem } from '../weapons/bullet-tracer-system';
 import {
   FirstPersonWeaponRig,
   type FirstPersonWeaponDiagnostics,
@@ -37,6 +38,7 @@ export interface WorldDiagnostics {
   colliders: number;
   sensors: number;
   ccdBodies: number;
+  tracers: number;
   renderer: {
     calls: number;
     triangles: number;
@@ -81,6 +83,7 @@ export class WorldRuntime {
   private readonly playerMeshes = new Map<EntityId, THREE.Mesh>();
   private readonly supportColliderHandles = new Set<number>();
   private firstPersonWeapon: FirstPersonWeaponRig | null = null;
+  private readonly bulletTracers: BulletTracerSystem;
   private disposed = false;
 
   private constructor(
@@ -89,7 +92,9 @@ export class WorldRuntime {
     private readonly scene: THREE.Scene | null,
     private readonly camera: THREE.PerspectiveCamera | null,
     private readonly physicsWorld: RAPIER.World,
-  ) {}
+  ) {
+    this.bulletTracers = new BulletTracerSystem(scene);
+  }
 
   static async create(canvas: HTMLCanvasElement): Promise<WorldRuntime> {
     await initializeRapier();
@@ -218,6 +223,11 @@ export class WorldRuntime {
   step(dt: number): void {
     this.physicsWorld.timestep = dt;
     this.physicsWorld.step();
+    this.bulletTracers.update(dt);
+  }
+
+  spawnBulletTracer(start: Vec3, end: Vec3, team: Team): void {
+    this.bulletTracers.spawn(start, end, team);
   }
 
   updateFirstPersonWeapon(state: FirstPersonWeaponState, dt: number): void {
@@ -304,6 +314,7 @@ export class WorldRuntime {
       colliders: this.physicsWorld.colliders.len(),
       sensors: 0,
       ccdBodies: 0,
+      tracers: this.bulletTracers.diagnostics().active,
       renderer: {
         calls: render?.calls ?? 0,
         triangles: render?.triangles ?? 0,
@@ -325,6 +336,7 @@ export class WorldRuntime {
     for (const material of this.disposableMaterials) material.dispose();
     this.firstPersonWeapon?.dispose();
     this.firstPersonWeapon = null;
+    this.bulletTracers.dispose();
     this.physicsWorld.free();
     this.renderer?.dispose();
   }
