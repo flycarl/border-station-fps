@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import type { EntityId, Team, Vec3 } from '../core/types';
+import type { SiteBounds } from '../match/bomb-system';
 import { BulletTracerSystem } from '../weapons/bullet-tracer-system';
 import {
   FirstPersonWeaponRig,
@@ -55,6 +56,21 @@ const PLAYER_RADIUS = 0.35;
 const PLAYER_LINEAR_DAMPING = 0.8;
 const ACTIVE_COLLISION_GROUPS = 0xffffffff;
 const INACTIVE_COLLISION_GROUPS = 0;
+const BOMB_SITE_MARKER_Y = 0.012;
+
+export interface BombSiteMarkerDiagnostics {
+  visible: boolean;
+  center: { x: number; z: number };
+  size: { x: number; z: number };
+  fillOpacity: number;
+  outlineColor: number;
+}
+
+declare global {
+  interface Window {
+    __THREE_BOMB_SITE_MARKER__?: BombSiteMarkerDiagnostics;
+  }
+}
 
 let rapierInitialization: Promise<void> | null = null;
 
@@ -67,6 +83,48 @@ function colorForSolid(solid: SolidDef): number {
   if (solid.kind === 'cover') return 0x263b48;
   if (solid.kind === 'wall') return 0x425a68;
   return 0xb08b59;
+}
+
+export function createBombSiteMarkerGeometry(
+  site: SiteBounds,
+): { fill: THREE.BufferGeometry; outline: THREE.BufferGeometry } {
+  const minX = site.center.x - site.halfExtents.x;
+  const maxX = site.center.x + site.halfExtents.x;
+  const minZ = site.center.z - site.halfExtents.z;
+  const maxZ = site.center.z + site.halfExtents.z;
+  const y = BOMB_SITE_MARKER_Y;
+
+  const fill = new THREE.BufferGeometry();
+  fill.setAttribute('position', new THREE.Float32BufferAttribute([
+    minX, y, minZ, maxX, y, minZ, maxX, y, maxZ,
+    minX, y, minZ, maxX, y, maxZ, minX, y, maxZ,
+  ], 3));
+  fill.computeVertexNormals();
+
+  const outlineVertices = [
+    minX, y, minZ, maxX, y, minZ,
+    maxX, y, minZ, maxX, y, maxZ,
+    maxX, y, maxZ, minX, y, maxZ,
+    minX, y, maxZ, minX, y, minZ,
+  ];
+  const accentLength = Math.min(1.5, site.halfExtents.x * 0.35, site.halfExtents.z * 0.35);
+  for (const [x, z, xDirection, zDirection] of [
+    [minX, minZ, 1, 1],
+    [maxX, minZ, -1, 1],
+    [maxX, maxZ, -1, -1],
+    [minX, maxZ, 1, -1],
+  ] as const) {
+    const insetX = x + xDirection * 0.24;
+    const insetZ = z + zDirection * 0.24;
+    outlineVertices.push(
+      insetX, y, insetZ, insetX + xDirection * accentLength, y, insetZ,
+      insetX, y, insetZ, insetX, y, insetZ + zDirection * accentLength,
+    );
+  }
+  const outline = new THREE.BufferGeometry();
+  outline.setAttribute('position', new THREE.Float32BufferAttribute(outlineVertices, 3));
+
+  return { fill, outline };
 }
 
 export function applyCameraPose(camera: THREE.Object3D, cameraPose: CameraPose): void {
@@ -82,6 +140,7 @@ export class WorldRuntime {
   private readonly inactivePlayers = new Set<EntityId>();
   private readonly playerMeshes = new Map<EntityId, THREE.Mesh>();
   private readonly supportColliderHandles = new Set<number>();
+  private bombSiteMarker: THREE.Group | null = null;
   private firstPersonWeapon: FirstPersonWeaponRig | null = null;
   private readonly bulletTracers: BulletTracerSystem;
   private disposed = false;
@@ -337,6 +396,9 @@ export class WorldRuntime {
     this.firstPersonWeapon?.dispose();
     this.firstPersonWeapon = null;
     this.bulletTracers.dispose();
+    this.bombSiteMarker?.removeFromParent();
+    this.bombSiteMarker = null;
+    delete window.__THREE_BOMB_SITE_MARKER__;
     this.physicsWorld.free();
     this.renderer?.dispose();
   }
@@ -382,6 +444,42 @@ export class WorldRuntime {
         this.disposableGeometries.push(geometry);
         this.disposableMaterials.push(material);
       }
+    }
+    this.addBombSiteMarker(map.bombSite);
+  }
+
+  private addBombSiteMarker(site: SiteBounds): void {
+    if (!this.scene) return;
+    const geometry = createBombSiteMarkerGeometry(site);
+    const fillMaterial = new THREE.MeshBasicMaterial({
+      color: 0xd20f22,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const outlineMaterial = new THREE.LineBasicMaterial({
+      color: 0xff3347,
+      transparent: true,
+      opacity: 0.98,
+    });
+    const marker = new THREE.Group();
+    marker.name = 'bomb-site-marker';
+    marker.add(new THREE.Mesh(geometry.fill, fillMaterial));
+    marker.add(new THREE.LineSegments(geometry.outline, outlineMaterial));
+    this.scene.add(marker);
+    this.bombSiteMarker = marker;
+    this.disposableGeometries.push(geometry.fill, geometry.outline);
+    this.disposableMaterials.push(fillMaterial, outlineMaterial);
+
+    if (new URLSearchParams(window.location.search).get('qa') === '1') {
+      window.__THREE_BOMB_SITE_MARKER__ = {
+        visible: marker.visible,
+        center: { x: site.center.x, z: site.center.z },
+        size: { x: site.halfExtents.x * 2, z: site.halfExtents.z * 2 },
+        fillOpacity: fillMaterial.opacity,
+        outlineColor: outlineMaterial.color.getHex(),
+      };
     }
   }
 

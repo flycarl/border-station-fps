@@ -401,6 +401,53 @@ test('composed plant, defuse, result transition, and restart use real systems', 
   expect(result.restarted).toMatchObject({ phase: 'freeze', round: 1, attackScore: 0, defenseScore: 0 });
 });
 
+test('authoritative bomb site has a visible red floor marker during active play', async ({ page }, testInfo) => {
+  const audit = installBrowserAudit(page);
+  await page.goto('/?qa=1&debug=1');
+  await page.waitForFunction(() => Boolean(
+    window.__THREE_GAME_QA__ && window.__THREE_BOMB_SITE_MARKER__,
+  ));
+  const objective = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.advance(721);
+    qa.place('attack-human', { x: -1, y: 3, z: -29 });
+    qa.command('attack-human', { interact: true });
+    qa.advance(193);
+    qa.command('attack-human', { interact: false, yaw: 0 });
+    qa.place('attack-human', { x: -1, y: 2.2, z: -18 });
+    qa.place('attack-bot-1', { x: -7, y: 2.5, z: -26 });
+    qa.place('defense-bot-1', { x: 7, y: 2.5, z: -27 });
+    qa.advance(1);
+    return {
+      marker: window.__THREE_BOMB_SITE_MARKER__,
+      state: qa.state,
+      bomb: qa.bomb,
+    };
+  });
+
+  expect(objective.marker).toEqual({
+    visible: true,
+    center: { x: -1, z: -29 },
+    size: { x: 18, z: 12 },
+    fillOpacity: 0.22,
+    outlineColor: 0xff3347,
+  });
+  expect(objective.state.phase).toBe('planted');
+  expect(objective.bomb.state).toBe('planted');
+  await page.locator('.mission-modal').evaluate((element) => element.remove());
+  await expect(page.locator('.mission-modal')).toHaveCount(0);
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  const screenshotPath = process.env.CAPTURE_VERIFICATION === '1'
+    ? 'docs/verification/autonomous-bomb-round-1440x900.png'
+    : testInfo.outputPath('autonomous-bomb-round-1440x900.png');
+  await page.screenshot({ path: screenshotPath });
+  expect(audit.consoleErrors).toEqual([]);
+  expect(audit.pageErrors).toEqual([]);
+  expect(audit.failedRequests).toEqual([]);
+});
+
 test('composed timeout awards defense through MatchController', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));

@@ -1,8 +1,50 @@
 import { expect, it } from 'vitest';
 import { createBorderStationGraybox } from '../../src/world/border-station-graybox';
-import { WorldRuntime } from '../../src/world/world-runtime';
+import {
+  createBombSiteMarkerGeometry,
+  WorldRuntime,
+} from '../../src/world/world-runtime';
 
 const mainRamp = createBorderStationGraybox().solids.find((solid) => solid.id === 'ramp-main')!;
+
+it('builds the red marker geometry from the authoritative bomb-site extents', () => {
+  const site = createBorderStationGraybox().bombSite;
+  const marker = createBombSiteMarkerGeometry(site);
+
+  try {
+    marker.fill.computeBoundingBox();
+    marker.outline.computeBoundingBox();
+
+    const expectedBounds = {
+      min: {
+        x: site.center.x - site.halfExtents.x,
+        z: site.center.z - site.halfExtents.z,
+      },
+      max: {
+        x: site.center.x + site.halfExtents.x,
+        z: site.center.z + site.halfExtents.z,
+      },
+    };
+    expect(marker.fill.boundingBox).toMatchObject(expectedBounds);
+    expect(marker.outline.boundingBox).toMatchObject(expectedBounds);
+    expect(marker.fill.getAttribute('position').count).toBe(6);
+    expect(marker.outline.getAttribute('position').count).toBeGreaterThan(8);
+  } finally {
+    marker.fill.dispose();
+    marker.outline.dispose();
+  }
+});
+
+it('keeps the cosmetic bomb-site marker out of the Rapier collider set', async () => {
+  const map = createBorderStationGraybox();
+  const runtime = await WorldRuntime.createHeadless(true);
+
+  try {
+    expect(runtime.diagnostics().colliders).toBe(map.solids.length);
+  } finally {
+    runtime.dispose();
+  }
+});
 
 it('returns the registered player actor ID when a ray hits its Rapier capsule', async () => {
   const runtime = await WorldRuntime.createHeadless();
