@@ -94,6 +94,21 @@ export interface GameSnapshot extends HudSnapshot {
   actors: ActorSnapshot[];
 }
 
+export function cloneGameSnapshot(snapshot: GameSnapshot): GameSnapshot {
+  return {
+    ...snapshot,
+    radar: {
+      bounds: { ...snapshot.radar.bounds },
+      bombSite: { ...snapshot.radar.bombSite },
+      contacts: snapshot.radar.contacts.map((contact) => ({ ...contact })),
+    },
+    actors: snapshot.actors.map((actor) => ({
+      ...actor,
+      position: { ...actor.position },
+    })),
+  };
+}
+
 interface GameDiagnostics {
   readonly renderer: WorldDiagnostics['renderer'];
   readonly physics: Omit<WorldDiagnostics, 'renderer'>;
@@ -219,13 +234,7 @@ export class Game {
   }
 
   snapshot(): GameSnapshot {
-    return {
-      ...this.currentSnapshot,
-      actors: this.currentSnapshot.actors.map((actor) => ({
-        ...actor,
-        position: { ...actor.position },
-      })),
-    };
+    return cloneGameSnapshot(this.currentSnapshot);
   }
 
   dispose(): void {
