@@ -107,7 +107,7 @@ test('expanded ramps are traversable through real Rapier movement', async ({ pag
   }
 });
 
-test('L-shaped corner is traversable through its right entry and lower exit', async ({ page }) => {
+test('L-shaped corner is traversable through its right entry and lower exit', async ({ page }, testInfo) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
   const traversal = await page.evaluate(() => {
@@ -127,6 +127,9 @@ test('L-shaped corner is traversable through its right entry and lower exit', as
     qa.command('attack-human', { moveX: -1, yaw: 0 });
     qa.advance(90);
     const exit = { ...actor(), supported: qa.isActorSupported('attack-human') };
+    qa.place('attack-human', { x: 13, y: 1, z: 7 });
+    qa.command('attack-human', { yaw: 2.85 });
+    qa.advance(1);
     return { entry, turn, exit };
   });
 
@@ -138,6 +141,17 @@ test('L-shaped corner is traversable through its right entry and lower exit', as
   expect(traversal.exit.position.z).toBeLessThan(13);
   expect([traversal.entry, traversal.turn, traversal.exit].every(({ supported }) => supported))
     .toBe(true);
+  await page.locator('.mission-modal').evaluate((element) => {
+    element.remove();
+  });
+  await expect(page.locator('.mission-modal')).toHaveCount(0);
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  const screenshotPath = process.env.CAPTURE_VERIFICATION === '1'
+    ? 'docs/verification/combat-feel-corner-1440x900.png'
+    : testInfo.outputPath('combat-feel-corner-1440x900.png');
+  await page.screenshot({ path: screenshotPath });
 });
 
 test('defenders hold during freeze then move in the live opening', async ({ page }) => {
