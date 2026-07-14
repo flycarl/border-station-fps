@@ -46,6 +46,15 @@ const distance = (left: Vec3, right: Vec3): number => Math.hypot(
   left.z - right.z,
 );
 
+const routeToward = (nav: NavGraph, from: Vec3, target: Vec3): Vec3 => {
+  const start = nav.nearest(from);
+  const goal = nav.nearest(target);
+  if (start.id === goal.id) return target;
+  const path = nav.findPath(start.id, goal.id);
+  const nextId = path[1] ?? path[0] ?? goal.id;
+  return nav.nodes.find(({ id }) => id === nextId)?.position ?? target;
+};
+
 export class BotSquad {
   private readonly bots: OwnedBot[];
   private round: number | null = null;
@@ -73,6 +82,7 @@ export class BotSquad {
 
     const actorById = new Map(context.actors.map((actor) => [actor.id, actor]));
     const defuserId = this.selectDefuser(context);
+    const retrieverId = this.selectRetriever(context);
     const commands = new Map<EntityId, PlayerCommand>();
     const activePhase = context.phase === undefined
       || context.phase === 'live'
@@ -81,7 +91,7 @@ export class BotSquad {
     for (const bot of this.bots) {
       const actor = actorById.get(bot.id);
       if (!actor) throw new Error(`Missing bot actor: ${bot.id}`);
-      const objective = this.objectiveFor(bot, context, defuserId);
+      const objective = this.objectiveFor(bot, context, defuserId, retrieverId);
       const targetNode = activePhase
         ? this.targetFor(bot, actor, objective, context)
         : actor.position;
@@ -125,10 +135,23 @@ export class BotSquad {
         || left.id.localeCompare(right.id))[0]?.id ?? null;
   }
 
+  private selectRetriever(context: BotSquadContext): EntityId | null {
+    if (context.bomb.state !== 'dropped') return null;
+    const attackerIds = new Set(
+      this.bots.filter(({ team }) => team === 'attack').map(({ id }) => id),
+    );
+    return context.actors
+      .filter((actor) => attackerIds.has(actor.id) && actor.alive)
+      .sort((left, right) => distance(left.position, context.bomb.position)
+        - distance(right.position, context.bomb.position)
+        || left.id.localeCompare(right.id))[0]?.id ?? null;
+  }
+
   private objectiveFor(
     bot: OwnedBot,
     context: BotSquadContext,
     defuserId: EntityId | null,
+    retrieverId: EntityId | null,
   ): BotObjective {
     if (context.phase !== undefined
       && context.phase !== 'live'
@@ -136,9 +159,10 @@ export class BotSquad {
       return 'hold';
     }
     if (bot.team === 'attack') {
+      if (bot.id === retrieverId) return 'retrieve';
       return context.bomb.carrierId === bot.id ? 'plant' : 'advance';
     }
-    return bot.id === defuserId ? 'defuse' : 'hold';
+    return bot.id === defuserId ? 'defuse' : 'advance';
   }
 
   private targetFor(
@@ -150,9 +174,23 @@ export class BotSquad {
     if (bot.team === 'defense' && objective === 'defuse') {
       return context.bomb.position;
     }
+    if (objective === 'retrieve') {
+      return routeToward(context.nav, actor.position, context.bomb.position);
+    }
+
+    if (bot.team === 'defense') {
+      const closestAttacker = context.actors
+        .filter((candidate) => candidate.team === 'attack' && candidate.alive)
+        .sort((left, right) => distance(actor.position, left.position)
+          - distance(actor.position, right.position)
+          || left.id.localeCompare(right.id))[0];
+      if (closestAttacker) {
+        return routeToward(context.nav, actor.position, closestAttacker.position);
+      }
+    }
 
     const site = context.nav.nearest(actor.position, 'site');
-    if (objective === 'hold') {
+    if (objective === 'hold' || bot.team === 'defense') {
       const defenderIndex = this.bots
         .filter(({ team }) => team === 'defense')
         .findIndex(({ id }) => id === bot.id);

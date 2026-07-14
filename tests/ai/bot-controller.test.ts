@@ -145,7 +145,7 @@ it('returns a complete command and normalized movement toward a nav target', () 
   expect(command.moveZ).toBe(-1);
 });
 
-it.each(['plant', 'defuse'] as const)(
+it.each(['plant', 'defuse', 'retrieve'] as const)(
   'holds interact for %s only near the objective',
   (objective) => {
     const nearBot = new BotController('near', 'attack', 7);

@@ -73,6 +73,17 @@ export function createGameRoster(): RosterEntry[] {
   ];
 }
 
+export function selectRoundBombCarrier(
+  roster: readonly RosterEntry[],
+  round: number,
+): EntityId {
+  const attackers = roster.filter(({ team }) => team === 'attack');
+  if (attackers.length === 0) throw new Error('Cannot assign bomb without an attacker');
+  const seeded = (Math.imul(Math.max(1, Math.trunc(round)), 1_664_525)
+    + 1_013_904_223) >>> 0;
+  return attackers[seeded % attackers.length]!.id;
+}
+
 interface ActorRuntime {
   definition: RosterEntry;
   state: PlayerState;
@@ -170,7 +181,7 @@ export class Game {
   private readonly botSquad: BotSquad;
   private actors = new Map<EntityId, ActorRuntime>();
   private match = new MatchController(MATCH_CONFIG);
-  private bomb = new BombSystem(BOMB_CONFIG, 'attack-human');
+  private bomb = this.createBombForRound(1);
   private weaponSystem: WeaponSystem;
   private commands = new Map<EntityId, PlayerCommand>();
   private currentSnapshot: GameSnapshot;
@@ -222,7 +233,7 @@ export class Game {
     this.actors.clear();
     this.commands.clear();
     this.match = new MatchController(MATCH_CONFIG);
-    this.bomb = new BombSystem(BOMB_CONFIG, 'attack-human');
+    this.bomb = this.createBombForRound(this.match.snapshot().round);
     this.weaponSystem = this.createWeaponSystem();
     this.humanWeaponFired = false;
     this.botSquad.reset(1);
@@ -440,7 +451,7 @@ export class Game {
     for (const id of this.actors.keys()) this.world.removePlayer(id);
     this.actors.clear();
     this.commands.clear();
-    this.bomb = new BombSystem(BOMB_CONFIG, 'attack-human');
+    this.bomb = this.createBombForRound(this.match.snapshot().round);
     this.weaponSystem = this.createWeaponSystem();
     this.humanWeaponFired = false;
     this.botSquad.reset(this.match.snapshot().round);
@@ -449,6 +460,10 @@ export class Game {
 
   private createWeaponSystem(): WeaponSystem {
     return new WeaponSystem(this.world, (id) => this.actors.get(id)?.state);
+  }
+
+  private createBombForRound(round: number): BombSystem {
+    return new BombSystem(BOMB_CONFIG, selectRoundBombCarrier(this.roster, round));
   }
 
   private composeSnapshot(): GameSnapshot {

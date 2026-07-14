@@ -3,6 +3,7 @@ import {
   calculateTracerOrigin,
   cloneGameSnapshot,
   createGameRoster,
+  selectRoundBombCarrier,
   STEP_ORDER,
   type GameSnapshot,
 } from '../src/game';
@@ -29,6 +30,23 @@ it('creates one human attacker, two attack bots, and three defense bots', () => 
   ]);
   expect(roster.filter(({ team, human }) => team === 'attack' && !human)).toHaveLength(2);
   expect(roster.filter(({ team, human }) => team === 'defense' && !human)).toHaveLength(3);
+});
+
+it('selects one deterministic attacker bomb carrier with round-seeded variety', () => {
+  const roster = createGameRoster();
+  const firstPass = Array.from({ length: 12 }, (_, index) => (
+    selectRoundBombCarrier(roster, index + 1)
+  ));
+  const replay = Array.from({ length: 12 }, (_, index) => (
+    selectRoundBombCarrier(roster, index + 1)
+  ));
+  const attackerIds = new Set(
+    roster.filter(({ team }) => team === 'attack').map(({ id }) => id),
+  );
+
+  expect(replay).toEqual(firstPass);
+  expect(firstPass.every((id) => attackerIds.has(id))).toBe(true);
+  expect(new Set(firstPass)).toEqual(attackerIds);
 });
 
 it('starts visual tracers in front of and beside the camera at the muzzle', () => {

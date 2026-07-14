@@ -81,6 +81,128 @@ it('ignores dead defenders when selecting the closest defuser', () => {
   expect(commands.get('defense-3')?.interact).toBe(true);
 });
 
+it('assigns only the closest living attack bot to retrieve a dropped bomb', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-1')!.position = { x: 0.4, y: 0, z: 0 };
+  views.find(({ id }) => id === 'attack-2')!.position = { x: 1.2, y: 0, z: 0 };
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb({ state: 'dropped', carrierId: null, position: { x: 0, y: 0, z: 0 } }),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  expect(commands.get('attack-1')?.interact).toBe(true);
+  expect(commands.get('attack-2')?.interact).toBe(false);
+});
+
+it('ignores a dead closer attacker when assigning dropped-bomb retrieval', () => {
+  const views = actors();
+  const closer = views.find(({ id }) => id === 'attack-1')!;
+  closer.position = { x: 0.2, y: 0, z: 0 };
+  closer.alive = false;
+  views.find(({ id }) => id === 'attack-2')!.position = { x: 1, y: 0, z: 0 };
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb({ state: 'dropped', carrierId: null, position: { x: 0, y: 0, z: 0 } }),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  expect(commands.get('attack-1')?.interact).toBe(false);
+  expect(commands.get('attack-2')?.interact).toBe(true);
+});
+
+it('routes the dropped-bomb retriever through the navigation graph', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-1')!.position = { x: 0, y: 0, z: 10 };
+  views.find(({ id }) => id === 'attack-2')!.position = { x: 2, y: 0, z: 10 };
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb({ state: 'dropped', carrierId: null, position: { x: -5, y: 0, z: 0 } }),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  expect(commands.get('attack-1')).toMatchObject({ moveZ: -1, interact: false });
+  expect(commands.get('attack-1')?.yaw).toBeCloseTo(0);
+});
+
+it('makes an attack-bot carrier plant when it reaches the bomb site', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-2')!.position = { x: 0, y: 0, z: 0 };
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb({ carrierId: 'attack-2', position: { x: 0, y: 0, z: 0 } }),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  expect(commands.get('attack-2')?.interact).toBe(true);
+});
+
+it('counter-pushes defenders toward the nearest living attacker before planting', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-1')!.position = { x: 8, y: 0, z: 0 };
+  views.find(({ id }) => id === 'attack-2')!.position = { x: -8, y: 0, z: 8 };
+  for (const actor of views.filter(({ team }) => team === 'defense')) {
+    actor.position = { x: 0, y: 0, z: 0 };
+    actor.yaw = 0;
+  }
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb(),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  for (const id of ['defense-1', 'defense-2', 'defense-3']) {
+    expect(commands.get(id)).toMatchObject({
+      yaw: -Math.PI / 2,
+      moveZ: -1,
+    });
+  }
+});
+
+it('routes defender counter-pressure through the navigation graph', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-1')!.position = { x: -5, y: 0, z: 0 };
+  views.find(({ id }) => id === 'attack-2')!.alive = false;
+  for (const actor of views.filter(({ team }) => team === 'defense')) {
+    actor.position = { x: 0, y: 0, z: -10 };
+    actor.yaw = Math.PI;
+  }
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb(),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  for (const id of ['defense-1', 'defense-2', 'defense-3']) {
+    expect(commands.get(id)?.moveZ).toBe(-1);
+    expect(Math.abs(commands.get(id)?.yaw ?? 0)).toBeCloseTo(Math.PI);
+  }
+});
+
 it('reproduces the first command sequence when reset to the same round', () => {
   const squad = new BotSquad(ids);
   const context = {
@@ -121,6 +243,9 @@ it('does not move, fire, or interact outside active match phases', () => {
 
 it('moves live defenders toward distinct left, center, and right site anchors', () => {
   const views = actors();
+  for (const actor of views.filter(({ team }) => team === 'attack')) {
+    actor.alive = false;
+  }
   for (const actor of views.filter(({ team }) => team === 'defense')) {
     actor.position = { x: 0, y: 0, z: 5 };
     actor.yaw = 0;

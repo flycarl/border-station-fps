@@ -6,7 +6,7 @@ import {
   type Vec3,
 } from '../core/types';
 
-export type BotObjective = 'advance' | 'hold' | 'plant' | 'defuse';
+export type BotObjective = 'advance' | 'hold' | 'plant' | 'retrieve' | 'defuse';
 
 export interface BotView {
   position: Vec3;
@@ -29,7 +29,7 @@ export interface BotContext {
   dt: number;
 }
 
-type BotState = 'advance' | 'engage' | 'plant' | 'hold' | 'defuse';
+type BotState = 'advance' | 'engage' | 'plant' | 'retrieve' | 'hold' | 'defuse';
 
 const MAX_ENGAGE_DISTANCE = 42;
 const VIEW_CONE_COSINE = Math.cos((120 * Math.PI / 180) / 2);
@@ -171,7 +171,9 @@ export class BotController {
 
     const closeEnough = distance(context.self.position, context.targetNode)
       <= INTERACT_DISTANCE;
-    if ((this.state === 'plant' || this.state === 'defuse') && closeEnough) {
+    if ((this.state === 'plant'
+      || this.state === 'retrieve'
+      || this.state === 'defuse') && closeEnough) {
       command.interact = true;
       return;
     }
