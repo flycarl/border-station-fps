@@ -107,30 +107,95 @@ test('expanded ramps are traversable through real Rapier movement', async ({ pag
   }
 });
 
-test('live bots engage at expanded range through the game command bridge', async ({ page }) => {
+test('L-shaped corner is traversable through its right entry and lower exit', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
-  const commands = await page.evaluate(() => {
+  const traversal = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const actor = () => qa.state.actors.find(({ id }) => id === 'attack-human')!;
+    qa.advance(721);
+    qa.place('attack-human', { x: 0, y: 1, z: 30 });
+
+    qa.command('attack-human', { moveX: 1, yaw: 0 });
+    qa.advance(100);
+    const entry = { ...actor(), supported: qa.isActorSupported('attack-human') };
+
+    qa.command('attack-human', { moveZ: -1, yaw: 0 });
+    qa.advance(180);
+    const turn = { ...actor(), supported: qa.isActorSupported('attack-human') };
+
+    qa.command('attack-human', { moveX: -1, yaw: 0 });
+    qa.advance(90);
+    const exit = { ...actor(), supported: qa.isActorSupported('attack-human') };
+    return { entry, turn, exit };
+  });
+
+  expect(traversal.entry.position.x).toBeGreaterThan(9);
+  expect(traversal.entry.position.z).toBeGreaterThan(28);
+  expect(traversal.turn.position.x).toBeGreaterThan(9);
+  expect(traversal.turn.position.z).toBeLessThan(13);
+  expect(traversal.exit.position.x).toBeLessThan(4);
+  expect(traversal.exit.position.z).toBeLessThan(13);
+  expect([traversal.entry, traversal.turn, traversal.exit].every(({ supported }) => supported))
+    .toBe(true);
+});
+
+test('defenders hold during freeze then move in the live opening', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  const opening = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const defenders = () => qa.state.actors
+      .filter(({ team }) => team === 'defense')
+      .map(({ id, position }) => ({ id, position: { ...position } }));
+    qa.useLiveCommands();
+    const start = defenders();
+    qa.advance(600);
+    const frozen = defenders();
+    qa.advance(151);
+    const live = defenders();
+    return { start, frozen, live };
+  });
+
+  const planarDistance = (
+    left: { x: number; z: number },
+    right: { x: number; z: number },
+  ): number => Math.hypot(left.x - right.x, left.z - right.z);
+  for (const [index, defender] of opening.frozen.entries()) {
+    expect(defender.id).toBe(opening.start[index]!.id);
+    expect(planarDistance(defender.position, opening.start[index]!.position)).toBeLessThan(0.05);
+    expect(planarDistance(opening.live[index]!.position, defender.position)).toBeGreaterThan(1.5);
+  }
+  expect(new Set(opening.live.map(({ position }) => position.x.toFixed(2))).size).toBe(3);
+});
+
+test('live bots engage at expanded range through the clear corner lane', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  const engagement = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
     qa.advance(721);
-    qa.place('attack-human', { x: 14, y: 1, z: -40 });
+    qa.place('attack-human', { x: 14, y: 1, z: 0 });
     qa.place('attack-bot-1', { x: -14, y: 1, z: -40 });
     qa.place('attack-bot-2', { x: -13, y: 1, z: -40 });
-    qa.place('defense-bot-1', { x: 14, y: 1, z: 0 });
-    qa.place('defense-bot-2', { x: -14, y: 1, z: 35 });
-    qa.place('defense-bot-3', { x: -13, y: 1, z: 35 });
+    qa.place('defense-bot-1', { x: 14, y: 1, z: 35 });
+    qa.place('defense-bot-2', { x: -14, y: 1, z: -35 });
+    qa.place('defense-bot-3', { x: -13, y: 1, z: -35 });
+    qa.advance(1);
+    const clearLane = qa.canActorsSee('defense-bot-1', 'attack-human');
     qa.useLiveCommands();
     const samples = [];
     for (let tick = 0; tick < 30; tick++) {
       qa.advance(1);
       samples.push(qa.actorCommand('defense-bot-1'));
     }
-    return samples;
+    return { clearLane, samples };
   });
 
-  expect(commands.some((command) => command.fire)).toBe(true);
-  expect(commands.some((command) => Math.abs(command.moveX) > 0)).toBe(true);
-  expect(commands.some((command) => command.moveZ < 0)).toBe(true);
+  expect(engagement.clearLane).toBe(true);
+  expect(engagement.samples.some((command) => command.fire)).toBe(true);
+  expect(engagement.samples.some((command) => Math.abs(command.moveX) > 0)).toBe(true);
+  expect(engagement.samples.some((command) => command.moveZ < 0)).toBe(true);
 });
 
 test('weapon switching, recoil, reload, and active-play capture use the game bridge', async ({ page }, testInfo) => {

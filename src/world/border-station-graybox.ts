@@ -98,6 +98,20 @@ export function createBorderStationGraybox(): GrayboxDefinition {
         kind: 'cover',
       },
       {
+        id: 'corner-cross',
+        center: { x: -4.5, y: 2, z: 25 },
+        size: { x: 23, y: 4, z: 1 },
+        yaw: 0,
+        kind: 'wall',
+      },
+      {
+        id: 'corner-return',
+        center: { x: 7, y: 2, z: 19.5 },
+        size: { x: 1, y: 4, z: 12 },
+        yaw: 0,
+        kind: 'wall',
+      },
+      {
         id: 'wall-left',
         center: { x: -17, y: 2.5, z: 0 },
         size: { x: 1, y: 5, z: 94 },
@@ -128,19 +142,31 @@ export function createBorderStationGraybox(): GrayboxDefinition {
       {
         id: 'attack',
         position: { x: 0, y: 1, z: 36 },
-        neighbors: ['mid-left', 'mid-right'],
+        neighbors: ['corner-entry'],
         tags: ['spawn-attack'],
+      },
+      {
+        id: 'corner-entry',
+        position: { x: 11, y: 1, z: 29 },
+        neighbors: ['attack', 'corner-turn'],
+        tags: ['corner'],
+      },
+      {
+        id: 'corner-turn',
+        position: { x: 11, y: 1, z: 12 },
+        neighbors: ['corner-entry', 'mid-left', 'mid-right'],
+        tags: ['corner'],
       },
       {
         id: 'mid-left',
         position: { x: -8, y: 1, z: 13 },
-        neighbors: ['attack', 'site-left'],
+        neighbors: ['corner-turn', 'site-left'],
         tags: ['cover'],
       },
       {
         id: 'mid-right',
         position: { x: 9, y: 1, z: 8 },
-        neighbors: ['attack', 'site-right'],
+        neighbors: ['corner-turn', 'site-right'],
         tags: ['cover'],
       },
       {

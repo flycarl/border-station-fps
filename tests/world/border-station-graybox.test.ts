@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { NavGraph } from '../../src/ai/nav-graph';
 import {
   BORDER_STATION_RAMP_PITCH,
   createBorderStationGraybox,
@@ -25,7 +26,9 @@ it('expands the combat footprint and offers two authored routes', () => {
   expect(floor?.size.z).toBeGreaterThanOrEqual(90);
   expect(ramps).toHaveLength(2);
   expect(covers.length).toBeGreaterThanOrEqual(5);
-  expect(attackSpawn?.neighbors).toEqual(expect.arrayContaining(['mid-left', 'mid-right']));
+  expect(attackSpawn?.neighbors).toEqual(['corner-entry']);
+  expect(map.navNodes.find((node) => node.id === 'corner-turn')?.neighbors)
+    .toEqual(expect.arrayContaining(['mid-left', 'mid-right']));
   expect(map.navNodes.find((node) => node.id === 'mid-left')?.neighbors)
     .toContain('site-left');
   expect(map.navNodes.find((node) => node.id === 'mid-right')?.neighbors)
@@ -71,5 +74,64 @@ it('faces attack spawns toward the site and defense spawns toward attackers', ()
     Math.PI,
     Math.PI,
     Math.PI,
+  ]);
+});
+
+it('forms an L-shaped corner with a wide right entry and lower exit', () => {
+  const map = createBorderStationGraybox();
+  const cross = map.solids.find((solid) => solid.id === 'corner-cross');
+  const returned = map.solids.find((solid) => solid.id === 'corner-return');
+
+  expect(cross).toMatchObject({
+    center: { x: -4.5, y: 2, z: 25 },
+    size: { x: 23, y: 4, z: 1 },
+    yaw: 0,
+    kind: 'wall',
+  });
+  expect(returned).toMatchObject({
+    center: { x: 7, y: 2, z: 19.5 },
+    size: { x: 1, y: 4, z: 12 },
+    yaw: 0,
+    kind: 'wall',
+  });
+
+  expect(cross!.size.x).toBeGreaterThan(cross!.size.z);
+  expect(returned!.size.z).toBeGreaterThan(returned!.size.x);
+  expect(cross!.center.x + cross!.size.x / 2).toBe(returned!.center.x);
+  expect(cross!.center.z).toBe(returned!.center.z + returned!.size.z / 2 - 0.5);
+
+  const rightBoundary = map.solids.find((solid) => solid.id === 'wall-right')!;
+  const rightEntryWidth = rightBoundary.center.x - rightBoundary.size.x / 2
+    - (cross!.center.x + cross!.size.x / 2 + returned!.size.x / 2);
+  const lowerExitZ = returned!.center.z - returned!.size.z / 2;
+  expect(rightEntryWidth).toBeGreaterThanOrEqual(8);
+  expect(lowerExitZ).toBeGreaterThan(map.navNodes.find(({ id }) => id === 'mid-right')!.position.z);
+});
+
+it('connects both attack routes through the corner turn', () => {
+  const map = createBorderStationGraybox();
+  const nav = new NavGraph(map.navNodes);
+  const entry = map.navNodes.find((node) => node.id === 'corner-entry');
+  const turn = map.navNodes.find((node) => node.id === 'corner-turn');
+
+  expect(entry).toMatchObject({
+    position: { x: 11, y: 1, z: 29 },
+    neighbors: expect.arrayContaining(['attack', 'corner-turn']),
+  });
+  expect(turn).toMatchObject({
+    position: { x: 11, y: 1, z: 12 },
+    neighbors: expect.arrayContaining(['corner-entry', 'mid-left', 'mid-right']),
+  });
+  expect(nav.findPath('attack', 'mid-left')).toEqual([
+    'attack',
+    'corner-entry',
+    'corner-turn',
+    'mid-left',
+  ]);
+  expect(nav.findPath('attack', 'mid-right')).toEqual([
+    'attack',
+    'corner-entry',
+    'corner-turn',
+    'mid-right',
   ]);
 });
