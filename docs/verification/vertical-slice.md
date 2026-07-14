@@ -14,7 +14,7 @@ The player now has a camera-mounted procedural rifle and pistol with named recei
 
 Fresh verification passed with 16 Vitest files / 80 tests, TypeScript no-emit, Vite production build, and all 11 Playwright Chromium scenarios. The updated browser suite crosses both ramps with real Rapier movement, observes a live bot produce pressure-movement and fire commands at 40 m, verifies pistol/rifle switching plus recoil/reload transforms through the `Game → WorldRuntime → FirstPersonWeaponRig` bridge, uses the expanded bomb site and unobstructed combat lanes, reports zero page/console/network errors, and verifies restart resource counts by equality rather than an obsolete fixed collider count. Built JS is 2,799.84 kB minified / 987.75 kB gzip (size warning only).
 
-Known release note: Vite reports a 2,790.87 kB minified / 984.97 kB gzip JavaScript chunk, primarily Three.js + Rapier. Code splitting is deferred beyond this vertical slice.
+Known release note: Vite reports a 2,799.84 kB minified / 987.75 kB gzip JavaScript chunk, primarily Three.js + Rapier. Code splitting is deferred beyond this vertical slice.
 
 ## Reference ledger
 
