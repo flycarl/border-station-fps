@@ -34,7 +34,9 @@ type BotState = 'advance' | 'engage' | 'plant' | 'hold' | 'defuse';
 const MAX_ENGAGE_DISTANCE = 42;
 const VIEW_CONE_COSINE = Math.cos((120 * Math.PI / 180) / 2);
 const INTERACT_DISTANCE = 1.5;
+const HOLD_RADIUS = 1.5;
 const PRESSURE_DISTANCE = 15;
+const AIM_ERROR_INTERVAL = 0.35;
 
 const distance = (left: Vec3, right: Vec3): number => Math.hypot(
   left.x - right.x,
@@ -55,6 +57,7 @@ export class BotController {
   private reactionDelay = 0.25;
   private aimErrorYaw = 0;
   private aimErrorPitch = 0;
+  private aimErrorElapsed = 0;
   private strafeDirection = 1;
 
   constructor(
@@ -126,11 +129,21 @@ export class BotController {
       this.targetId = targetId;
       this.reactionElapsed = 0;
       this.reactionDelay = 0.16 + this.random() * 0.22;
-      this.aimErrorYaw = (this.random() * 2 - 1) * 0.014;
-      this.aimErrorPitch = (this.random() * 2 - 1) * 0.009;
+      this.aimErrorElapsed = 0;
+      this.resampleAimError();
       this.strafeDirection = this.random() < 0.5 ? -1 : 1;
     }
     this.reactionElapsed += dt;
+    this.aimErrorElapsed += dt;
+    while (this.aimErrorElapsed >= AIM_ERROR_INTERVAL) {
+      this.aimErrorElapsed -= AIM_ERROR_INTERVAL;
+      this.resampleAimError();
+    }
+  }
+
+  private resampleAimError(): void {
+    this.aimErrorYaw = (this.random() * 2 - 1) * 0.014;
+    this.aimErrorPitch = (this.random() * 2 - 1) * 0.009;
   }
 
   private aimAt(command: PlayerCommand, from: Vec3, to: Vec3): void {
@@ -147,11 +160,12 @@ export class BotController {
   }
 
   private moveForObjective(command: PlayerCommand, context: BotContext): void {
-    if (this.state === 'hold') return;
     const dx = context.targetNode.x - context.self.position.x;
     const dz = context.targetNode.z - context.self.position.z;
     const planarDistance = Math.hypot(dx, dz);
     command.yaw = planarDistance > 0 ? aimYaw(context.self.position, context.targetNode) : command.yaw;
+
+    if (this.state === 'hold' && planarDistance <= HOLD_RADIUS) return;
 
     const closeEnough = distance(context.self.position, context.targetNode)
       <= INTERACT_DISTANCE;
@@ -165,5 +179,6 @@ export class BotController {
   private clearEngagement(): void {
     this.targetId = null;
     this.reactionElapsed = 0;
+    this.aimErrorElapsed = 0;
   }
 }

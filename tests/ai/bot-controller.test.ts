@@ -88,6 +88,42 @@ it('keeps pressure with deterministic advance and strafe movement while engaging
   expect(firstCommand).toEqual(secondCommand);
 });
 
+it('resamples bounded aim error during sustained fire and replays it from the seed', () => {
+  const first = new BotController('bot-sustained', 'defense', 17);
+  const replay = new BotController('bot-sustained', 'defense', 17);
+  const context = {
+    ...baseContext(),
+    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
+    dt: 0.38,
+  };
+
+  const firstSequence = [first.update(context), first.update(context)];
+  const replaySequence = [replay.update(context), replay.update(context)];
+
+  expect(firstSequence.every(({ fire }) => fire)).toBe(true);
+  expect(firstSequence[1]!.yaw).not.toBe(firstSequence[0]!.yaw);
+  expect(firstSequence[1]!.pitch).not.toBe(firstSequence[0]!.pitch);
+  for (const command of firstSequence) {
+    expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.014);
+    expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.009);
+  }
+  expect(replaySequence).toEqual(firstSequence);
+});
+
+it('moves a holding bot toward its anchor until it reaches the hold radius', () => {
+  const farBot = new BotController('far-hold', 'defense', 7);
+  const nearBot = new BotController('near-hold', 'defense', 7);
+
+  expect(farBot.update({
+    ...baseContext(),
+    targetNode: { x: 0, y: 0, z: -2 },
+  }).moveZ).toBe(-1);
+  expect(nearBot.update({
+    ...baseContext(),
+    targetNode: { x: 0, y: 0, z: -1 },
+  }).moveZ).toBe(0);
+});
+
 it('returns a complete command and normalized movement toward a nav target', () => {
   const bot = new BotController('bot-1', 'attack', 7);
   const command = bot.update({

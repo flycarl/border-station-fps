@@ -82,7 +82,9 @@ export class BotSquad {
       const actor = actorById.get(bot.id);
       if (!actor) throw new Error(`Missing bot actor: ${bot.id}`);
       const objective = this.objectiveFor(bot, context, defuserId);
-      const targetNode = this.targetFor(bot, actor, objective, context);
+      const targetNode = activePhase
+        ? this.targetFor(bot, actor, objective, context)
+        : actor.position;
       const enemies = activePhase
         ? context.actors
           .filter((candidate) => candidate.team !== bot.team)
@@ -150,7 +152,14 @@ export class BotSquad {
     }
 
     const site = context.nav.nearest(actor.position, 'site');
-    if (objective === 'hold') return site.position;
+    if (objective === 'hold') {
+      const defenderIndex = this.bots
+        .filter(({ team }) => team === 'defense')
+        .findIndex(({ id }) => id === bot.id);
+      const anchorId = ['site-left', 'site', 'site-right'][defenderIndex];
+      return context.nav.nodes.find(({ id }) => id === anchorId)?.position
+        ?? site.position;
+    }
     const from = context.nav.nearest(actor.position);
     const path = context.nav.findPath(from.id, site.id);
     const nextId = path[1] ?? path[0] ?? site.id;

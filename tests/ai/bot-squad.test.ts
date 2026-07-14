@@ -7,7 +7,9 @@ const ids = ['attack-1', 'attack-2', 'defense-1', 'defense-2', 'defense-3'];
 
 const nav = new NavGraph([
   { id: 'attack', position: { x: 0, y: 0, z: 10 }, neighbors: ['site'], tags: ['spawn-attack'] },
-  { id: 'site', position: { x: 0, y: 0, z: 0 }, neighbors: ['attack', 'defense'], tags: ['site'] },
+  { id: 'site-left', position: { x: -5, y: 0, z: 0 }, neighbors: ['site'], tags: ['ramp'] },
+  { id: 'site', position: { x: 0, y: 0, z: 0 }, neighbors: ['attack', 'defense', 'site-left', 'site-right'], tags: ['site'] },
+  { id: 'site-right', position: { x: 5, y: 0, z: 0 }, neighbors: ['site'], tags: ['ramp'] },
   { id: 'defense', position: { x: 0, y: 0, z: -10 }, neighbors: ['site'], tags: ['spawn-defense'] },
 ]);
 
@@ -115,4 +117,31 @@ it('does not move, fire, or interact outside active match phases', () => {
       interact: false,
     });
   }
+});
+
+it('moves live defenders toward distinct left, center, and right site anchors', () => {
+  const views = actors();
+  for (const actor of views.filter(({ team }) => team === 'defense')) {
+    actor.position = { x: 0, y: 0, z: 5 };
+    actor.yaw = 0;
+  }
+  const commands = new BotSquad(ids).sample({
+    round: 1,
+    phase: 'live',
+    actors: views,
+    bomb: bomb(),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  const left = commands.get('defense-1')!;
+  const center = commands.get('defense-2')!;
+  const right = commands.get('defense-3')!;
+  expect(left.moveZ).toBe(-1);
+  expect(center.moveZ).toBe(-1);
+  expect(right.moveZ).toBe(-1);
+  expect(left.yaw).toBeGreaterThan(center.yaw);
+  expect(center.yaw).toBeCloseTo(0);
+  expect(right.yaw).toBeLessThan(center.yaw);
 });
