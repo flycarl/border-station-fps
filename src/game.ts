@@ -185,9 +185,9 @@ declare global {
 }
 
 const MATCH_CONFIG = {
-  freeze: 12,
+  freeze: 3,
   live: 105,
-  result: 5,
+  result: 0,
   roundsToWin: 7,
   halftimeAfter: 6,
 };

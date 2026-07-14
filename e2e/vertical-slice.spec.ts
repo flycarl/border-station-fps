@@ -164,7 +164,7 @@ test('defenders hold during freeze then move in the live opening', async ({ page
       .map(({ id, position }) => ({ id, position: { ...position } }));
     qa.useLiveCommands();
     const start = defenders();
-    qa.advance(600);
+    qa.advance(150);
     const frozen = defenders();
     qa.advance(151);
     const live = defenders();
@@ -372,7 +372,7 @@ test('QA driver is absent without its explicit query gate', async ({ page }) => 
   expect(await page.evaluate(() => window.__THREE_GAME_QA__)).toBeUndefined();
 });
 
-test('composed plant, defuse, result transition, and restart use real systems', async ({ page }) => {
+test('composed plant and defuse immediately begin the next round preparation', async ({ page }) => {
   await page.goto('/?qa=1&debug=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
   const result = await page.evaluate(() => {
@@ -386,18 +386,16 @@ test('composed plant, defuse, result transition, and restart use real systems', 
     qa.place('attack-human', { x: -14, y: 1, z: 25 });
     qa.place('defense-bot-1', qa.bomb.position);
     qa.command('defense-bot-1', { interact: true });
-    qa.advance(421);
-    const defused = { ...qa.state, objective: qa.bomb };
-    qa.clearCommands();
-    qa.advance(301);
+    qa.advance(211);
     const nextRound = qa.state;
+    qa.clearCommands();
     qa.restart();
-    return { planted, defused, nextRound, restarted: qa.state };
+    return { planted, nextRound, restarted: qa.state };
   });
   expect(result.planted).toMatchObject({ phase: 'planted', bombState: 'planted' });
-  expect(result.defused.objective).toMatchObject({ state: 'defused' });
-  expect(result.defused).toMatchObject({ phase: 'result', bombState: 'defused', defenseScore: 1 });
-  expect(result.nextRound).toMatchObject({ phase: 'freeze', round: 2, defenseScore: 1 });
+  expect(result.nextRound).toMatchObject({ phase: 'freeze', round: 2, defenseScore: 1, bombState: 'carried' });
+  expect(result.nextRound.phaseRemaining).toBeGreaterThan(2.9);
+  expect(result.nextRound.phaseRemaining).toBeLessThanOrEqual(3);
   expect(result.restarted).toMatchObject({ phase: 'freeze', round: 1, attackScore: 0, defenseScore: 0 });
 });
 
@@ -453,10 +451,12 @@ test('composed timeout awards defense through MatchController', async ({ page })
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
   const state = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
-    qa.advance(721 + 6301);
+    qa.advance(181 + 6301);
     return qa.state;
   });
-  expect(state).toMatchObject({ phase: 'result', defenseScore: 1 });
+  expect(state).toMatchObject({ phase: 'freeze', round: 2, defenseScore: 1 });
+  expect(state.phaseRemaining).toBeGreaterThan(2.9);
+  expect(state.phaseRemaining).toBeLessThanOrEqual(3);
 });
 
 test('surviving attackers recover and plant the human carrier bomb after human death', async ({ page }) => {
@@ -520,7 +520,7 @@ test('surviving attackers recover and plant the human carrier bomb after human d
   expect(result.viewWeaponVisible).toBe(false);
 });
 
-test('composed WeaponSystem elimination awards attack', async ({ page }) => {
+test('composed WeaponSystem elimination awards attack and begins the next preparation', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
   const state = await page.evaluate(() => {
@@ -532,19 +532,22 @@ test('composed WeaponSystem elimination awards attack', async ({ page }) => {
     for (const defender of defenders) qa.place(defender, { x: -14, y: 1, z: -25 });
     for (const defender of defenders) {
       qa.place(defender, { x: 14, y: 1, z: 5 });
-      for (let shot = 0; shot < 5; shot++) {
+      for (let shot = 0; shot < 5 && qa.state.round === 1; shot++) {
         qa.command('attack-human', { fire: true, slot: 1, yaw: 0, pitch: 0 });
         qa.advance(1);
+        if (qa.state.round !== 1) break;
         qa.command('attack-human', { fire: false, slot: 1, yaw: 0, pitch: 0 });
         qa.advance(7);
       }
+      if (qa.state.round !== 1) break;
       qa.place(defender, { x: -14, y: 1, z: -25 });
     }
     return qa.state;
   });
-  expect(state).toMatchObject({ phase: 'result', attackScore: 1 });
-  expect(state).toMatchObject({ attackersAlive: 3, defendersAlive: 0 });
-  expect(state.actors.filter((actor) => actor.team === 'defense' && actor.alive)).toHaveLength(0);
+  expect(state).toMatchObject({ phase: 'freeze', round: 2, attackScore: 1 });
+  expect(state.phaseRemaining).toBeGreaterThan(2.9);
+  expect(state.phaseRemaining).toBeLessThanOrEqual(3);
+  expect(state).toMatchObject({ attackersAlive: 3, defendersAlive: 3 });
 });
 
 test('death reconciliation clears combat, navigation, support, and render participation until restart', async ({ page }) => {

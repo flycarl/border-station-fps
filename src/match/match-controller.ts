@@ -75,12 +75,13 @@ export class MatchController {
     if (team === 'attack') this.attackScore++;
     else this.defenseScore++;
     this.winner = team;
-    this.enter(
-      this.attackScore >= this.config.roundsToWin || this.defenseScore >= this.config.roundsToWin
-        ? 'match-over'
-        : 'result',
-      this.config.result,
-    );
+    if (this.attackScore >= this.config.roundsToWin || this.defenseScore >= this.config.roundsToWin) {
+      this.enter('match-over', this.config.result);
+    } else if (this.config.result === 0) {
+      this.startNextRound();
+    } else {
+      this.enter('result', this.config.result);
+    }
   }
 
   private startNextRound(): void {
