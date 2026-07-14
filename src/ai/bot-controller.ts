@@ -37,6 +37,8 @@ const INTERACT_DISTANCE = 1.5;
 const HOLD_RADIUS = 1.5;
 const PRESSURE_DISTANCE = 15;
 const AIM_ERROR_INTERVAL = 0.35;
+const AIM_ERROR_YAW_BOUND = 0.035;
+const AIM_ERROR_PITCH_BOUND = 0.020;
 
 const distance = (left: Vec3, right: Vec3): number => Math.hypot(
   left.x - right.x,
@@ -142,8 +144,8 @@ export class BotController {
   }
 
   private resampleAimError(): void {
-    this.aimErrorYaw = (this.random() * 2 - 1) * 0.014;
-    this.aimErrorPitch = (this.random() * 2 - 1) * 0.009;
+    this.aimErrorYaw = (this.random() * 2 - 1) * AIM_ERROR_YAW_BOUND;
+    this.aimErrorPitch = (this.random() * 2 - 1) * AIM_ERROR_PITCH_BOUND;
   }
 
   private aimAt(command: PlayerCommand, from: Vec3, to: Vec3): void {

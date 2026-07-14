@@ -97,16 +97,18 @@ it('resamples bounded aim error during sustained fire and replays it from the se
     dt: 0.38,
   };
 
-  const firstSequence = [first.update(context), first.update(context)];
-  const replaySequence = [replay.update(context), replay.update(context)];
+  const firstSequence = Array.from({ length: 8 }, () => first.update(context));
+  const replaySequence = Array.from({ length: 8 }, () => replay.update(context));
 
   expect(firstSequence.every(({ fire }) => fire)).toBe(true);
   expect(firstSequence[1]!.yaw).not.toBe(firstSequence[0]!.yaw);
   expect(firstSequence[1]!.pitch).not.toBe(firstSequence[0]!.pitch);
   for (const command of firstSequence) {
-    expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.014);
-    expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.009);
+    expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.035);
+    expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.020);
   }
+  expect(firstSequence.some((command) => Math.abs(command.yaw) > 0.014
+    || Math.abs(command.pitch) > 0.009)).toBe(true);
   expect(replaySequence).toEqual(firstSequence);
 });
 
