@@ -12,7 +12,7 @@ The July 14 pass expands the arena from 22×64 m to 34×94 m, separates attack a
 
 The player now has a camera-mounted procedural rifle and pistol with named receiver/slide, handguard, barrel, muzzle, magazine, stock/grip, sight, and hand meshes. The rig switches with weapon slot, hides on death, and responds to movement, firing, reloading, and pause state. It is visual-only and does not add physics colliders or raycast targets.
 
-Fresh verification passed with 16 Vitest files / 80 tests, TypeScript no-emit, Vite production build, and all 8 Playwright Chromium scenarios. The updated browser suite uses the expanded bomb site and unobstructed combat lanes, reports zero page/console/network errors, and verifies restart resource counts by equality rather than an obsolete fixed collider count. Built JS is 2,799.16 kB minified / 987.61 kB gzip (size warning only).
+Fresh verification passed with 16 Vitest files / 80 tests, TypeScript no-emit, Vite production build, and all 11 Playwright Chromium scenarios. The updated browser suite crosses both ramps with real Rapier movement, observes a live bot produce pressure-movement and fire commands at 40 m, verifies pistol/rifle switching plus recoil/reload transforms through the `Game → WorldRuntime → FirstPersonWeaponRig` bridge, uses the expanded bomb site and unobstructed combat lanes, reports zero page/console/network errors, and verifies restart resource counts by equality rather than an obsolete fixed collider count. Built JS is 2,799.84 kB minified / 987.75 kB gzip (size warning only).
 
 Known release note: Vite reports a 2,790.87 kB minified / 984.97 kB gzip JavaScript chunk, primarily Three.js + Rapier. Code splitting is deferred beyond this vertical slice.
 
@@ -36,7 +36,7 @@ Superseded initial implementation RED evidence (retained as history):
 - `npm run test:e2e`: after Chromium installation, failed because `开始任务` was absent.
 - Restart regression: the extended browser test failed with renderer geometries increasing from 10 to 14 while bodies/colliders stayed 6/12. Actor meshes now dispose geometry/material resources in `WorldRuntime.removePlayer`.
 
-Final fresh verification: `npm test -- --run && npm run typecheck && npm run build && npm run test:e2e && git diff --check` passed with 15 Vitest files / 76 tests, TypeScript no-emit, Vite production build, 8 Playwright Chromium tests in 8.5 seconds, and a clean diff check. The Playwright total comprises seven production game scenarios plus the focused injected-page-error audit regression. Built JS: 2,792.18 kB / 985.32 kB gzip (size warning only).
+Historical July 13 verification: `npm test -- --run && npm run typecheck && npm run build && npm run test:e2e && git diff --check` passed with 15 Vitest files / 76 tests, TypeScript no-emit, Vite production build, and 8 Playwright Chromium tests. Those totals are superseded by the July 14 expanded-combat record above.
 
 Review RED evidence:
 
@@ -60,7 +60,7 @@ Review RED evidence:
 - Pixel variance: 25/25 sampled canvas pixels were nonblank with 7 unique RGBA values.
 - Primary production-preview browser audit: 0 console errors, 0 uncaught page errors, 0 failed network requests. The shared `pageerror` collector is proven by a focused injected-error regression.
 - Pause/restart: Escape exposed `重新开始`; restart returned score to 0–0, phase to `freeze`, six actors, and one active RAF diagnostic.
-- Screenshot: [vertical-slice-active-1440x900.png](./vertical-slice-active-1440x900.png)
+- Active-play screenshot: [expanded-combat-pass-1440x900.png](./expanded-combat-pass-1440x900.png)
 
 ### Active renderer diagnostics
 

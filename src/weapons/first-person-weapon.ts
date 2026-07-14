@@ -10,6 +10,14 @@ export interface FirstPersonWeaponState {
   paused: boolean;
 }
 
+export interface FirstPersonWeaponDiagnostics {
+  visible: boolean;
+  weaponId: WeaponId;
+  rootPosition: { x: number; y: number; z: number };
+  weaponOffset: { x: number; y: number; z: number };
+  weaponRotation: { x: number; y: number; z: number };
+}
+
 const BASE_POSITION = new THREE.Vector3(0.36, -0.32, -0.68);
 
 function prepareMaterial(material: THREE.Material): THREE.Material {
@@ -121,6 +129,7 @@ export class FirstPersonWeaponRig {
   private time = 0;
   private recoil = 0;
   private reloadBlend = 0;
+  private weaponId: WeaponId = 'vanguard-rifle';
 
   constructor() {
     const materials = createMaterials();
@@ -136,6 +145,7 @@ export class FirstPersonWeaponRig {
   update(state: FirstPersonWeaponState, dt: number): void {
     const step = Math.max(0, Math.min(dt, 0.1));
     this.root.visible = state.alive;
+    this.weaponId = state.weaponId;
     this.rifle.visible = state.weaponId === 'vanguard-rifle';
     this.pistol.visible = state.weaponId === 'sidearm-9';
     if (!state.alive) return;
@@ -169,6 +179,29 @@ export class FirstPersonWeaponRig {
     this.pistol.position.x = 0.02;
     this.pistol.position.y += -0.02;
     this.pistol.position.z += -0.06;
+  }
+
+  diagnostics(): FirstPersonWeaponDiagnostics {
+    const weapon = this.weaponId === 'sidearm-9' ? this.pistol : this.rifle;
+    return {
+      visible: this.root.visible,
+      weaponId: this.weaponId,
+      rootPosition: {
+        x: this.root.position.x,
+        y: this.root.position.y,
+        z: this.root.position.z,
+      },
+      weaponOffset: {
+        x: weapon.position.x,
+        y: weapon.position.y,
+        z: weapon.position.z,
+      },
+      weaponRotation: {
+        x: weapon.rotation.x,
+        y: weapon.rotation.y,
+        z: weapon.rotation.z,
+      },
+    };
   }
 
   dispose(): void {

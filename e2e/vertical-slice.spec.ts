@@ -25,7 +25,7 @@ test('browser audit records uncaught page errors', async ({ page }) => {
   await expect.poll(() => audit.pageErrors).toEqual(['audit sentinel']);
 });
 
-test('starts a nonblank match and exposes restart', async ({ page }) => {
+test('starts a nonblank match and exposes restart', async ({ page }, testInfo) => {
   const audit = installBrowserAudit(page);
   await page.addInitScript(() => {
     let locked: Element | null = null;
@@ -57,7 +57,7 @@ test('starts a nonblank match and exposes restart', async ({ page }) => {
     return px[0]! + px[1]! + px[2]!;
   });
   expect(pixels).toBeGreaterThan(0);
-  await page.screenshot({ path: 'docs/verification/vertical-slice-active-1440x900.png' });
+  await page.screenshot({ path: testInfo.outputPath('vertical-slice-active-1440x900.png') });
   const beforeRestart = await page.evaluate(() => ({
     geometries: window.__THREE_GAME_DIAGNOSTICS__?.renderer.geometries,
     bodies: window.__THREE_GAME_DIAGNOSTICS__?.physics.bodies,
@@ -78,6 +78,105 @@ test('starts a nonblank match and exposes restart', async ({ page }) => {
   expect(audit.consoleErrors).toEqual([]);
   expect(audit.pageErrors).toEqual([]);
   expect(audit.failedRequests).toEqual([]);
+});
+
+test('expanded ramps are traversable through real Rapier movement', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  const routes = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.advance(721);
+    const crossRamp = (x: number) => {
+      qa.place('attack-human', { x, y: 1, z: -8 });
+      qa.command('attack-human', { moveZ: -1, yaw: 0 });
+      qa.advance(130);
+      return {
+        actor: qa.state.actors.find(({ id }) => id === 'attack-human')!,
+        supported: qa.isActorSupported('attack-human'),
+      };
+    };
+    const left = crossRamp(-5);
+    const right = crossRamp(8);
+    return { left, right };
+  });
+
+  for (const route of [routes.left, routes.right]) {
+    expect(route.actor.position.z).toBeLessThan(-19);
+    expect(route.actor.position.y).toBeGreaterThan(1.2);
+    expect(route.supported).toBe(true);
+  }
+});
+
+test('live bots engage at expanded range through the game command bridge', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  const commands = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.advance(721);
+    qa.place('attack-human', { x: 14, y: 1, z: -40 });
+    qa.place('attack-bot-1', { x: -14, y: 1, z: -40 });
+    qa.place('attack-bot-2', { x: -13, y: 1, z: -40 });
+    qa.place('defense-bot-1', { x: 14, y: 1, z: 0 });
+    qa.place('defense-bot-2', { x: -14, y: 1, z: 35 });
+    qa.place('defense-bot-3', { x: -13, y: 1, z: 35 });
+    qa.useLiveCommands();
+    const samples = [];
+    for (let tick = 0; tick < 30; tick++) {
+      qa.advance(1);
+      samples.push(qa.actorCommand('defense-bot-1'));
+    }
+    return samples;
+  });
+
+  expect(commands.some((command) => command.fire)).toBe(true);
+  expect(commands.some((command) => Math.abs(command.moveX) > 0)).toBe(true);
+  expect(commands.some((command) => command.moveZ < 0)).toBe(true);
+});
+
+test('weapon switching, recoil, reload, and active-play capture use the game bridge', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    let locked: Element | null = null;
+    Object.defineProperty(document, 'pointerLockElement', {
+      configurable: true,
+      get: () => locked,
+    });
+    Object.defineProperty(HTMLCanvasElement.prototype, 'requestPointerLock', {
+      configurable: true,
+      value: function requestPointerLock() {
+        locked = this;
+        document.dispatchEvent(new Event('pointerlockchange'));
+        return Promise.resolve();
+      },
+    });
+  });
+  await page.goto('/?qa=1&debug=1');
+  await page.getByRole('button', { name: '开始任务' }).click();
+  const diagnostics = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.advance(721);
+    qa.command('attack-human', { slot: 2 });
+    qa.advance(1);
+    const pistol = window.__THREE_GAME_DIAGNOSTICS__!.viewWeapon;
+    qa.command('attack-human', { slot: 1, fire: true });
+    qa.advance(1);
+    const recoil = window.__THREE_GAME_DIAGNOSTICS__!.viewWeapon;
+    qa.command('attack-human', { slot: 1, fire: false });
+    qa.advance(7);
+    qa.command('attack-human', { slot: 1, reload: true });
+    qa.advance(1);
+    const reload = window.__THREE_GAME_DIAGNOSTICS__!.viewWeapon;
+    return { phase: qa.state.phase, pistol, recoil, reload };
+  });
+
+  expect(diagnostics.phase).toBe('live');
+  expect(diagnostics.pistol?.weaponId).toBe('sidearm-9');
+  expect(diagnostics.recoil?.weaponId).toBe('vanguard-rifle');
+  expect(diagnostics.recoil?.weaponOffset.z).toBeGreaterThan(0);
+  expect(Math.abs(diagnostics.reload?.weaponRotation.z ?? 0)).toBeGreaterThan(0.05);
+  const screenshotPath = process.env.CAPTURE_VERIFICATION === '1'
+    ? 'docs/verification/expanded-combat-pass-1440x900.png'
+    : testInfo.outputPath('expanded-combat-pass-1440x900.png');
+  await page.screenshot({ path: screenshotPath });
 });
 
 test('keeps play paused when pointer lock is rejected and resumes only after confirmation', async ({ page }) => {

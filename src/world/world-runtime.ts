@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { EntityId, Vec3 } from '../core/types';
 import {
   FirstPersonWeaponRig,
+  type FirstPersonWeaponDiagnostics,
   type FirstPersonWeaponState,
 } from '../weapons/first-person-weapon';
 import {
@@ -221,6 +222,10 @@ export class WorldRuntime {
 
   updateFirstPersonWeapon(state: FirstPersonWeaponState, dt: number): void {
     this.firstPersonWeapon?.update(state, dt);
+  }
+
+  firstPersonWeaponDiagnostics(): FirstPersonWeaponDiagnostics | null {
+    return this.firstPersonWeapon?.diagnostics() ?? null;
   }
 
   raycast(

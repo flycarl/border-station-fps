@@ -82,6 +82,7 @@ export interface GameSnapshot extends HudSnapshot {
 interface GameDiagnostics {
   readonly renderer: WorldDiagnostics['renderer'];
   readonly physics: Omit<WorldDiagnostics, 'renderer'>;
+  readonly viewWeapon: ReturnType<WorldRuntime['firstPersonWeaponDiagnostics']>;
   readonly state: GameSnapshot;
   readonly loop: {
     active: boolean;
@@ -101,6 +102,8 @@ interface GameQaDriver {
   actorWorldStatus(actorId: EntityId): PlayerWorldStatus | null;
   canActorsSee(fromActorId: EntityId, toActorId: EntityId): boolean;
   isActorSupported(actorId: EntityId): boolean;
+  actorCommand(actorId: EntityId): PlayerCommand;
+  useLiveCommands(): void;
   restart(): void;
 }
 
@@ -513,6 +516,9 @@ export class Game {
         const { renderer: _renderer, ...physics } = game.world.diagnostics();
         return physics;
       },
+      get viewWeapon() {
+        return game.world.firstPersonWeaponDiagnostics();
+      },
       get state() {
         return game.snapshot();
       },
@@ -568,6 +574,13 @@ export class Game {
       },
       isActorSupported(actorId) {
         return game.world.isPlayerSupported(actorId);
+      },
+      actorCommand(actorId) {
+        if (!game.actors.has(actorId)) throw new Error(`Unknown QA actor: ${actorId}`);
+        return { ...(game.commands.get(actorId) ?? idleCommand()) };
+      },
+      useLiveCommands() {
+        game.qaCommands = null;
       },
       restart() {
         game.restart();
