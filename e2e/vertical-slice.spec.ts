@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
+const ADVANCE_TO_LIVE_TICKS = 3 * 60 + 1;
+
+async function advanceToLive(page: Page): Promise<void> {
+  await page.evaluate((ticks) => window.__THREE_GAME_QA__!.advance(ticks), ADVANCE_TO_LIVE_TICKS);
+}
+
 function installBrowserAudit(page: Page): {
   consoleErrors: string[];
   pageErrors: string[];
@@ -83,9 +89,9 @@ test('starts a nonblank match and exposes restart', async ({ page }, testInfo) =
 test('expanded ramps are traversable through real Rapier movement', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
   const routes = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
-    qa.advance(721);
     const crossRamp = (x: number) => {
       qa.place('attack-human', { x, y: 1, z: -8 });
       qa.command('attack-human', { moveZ: -1, yaw: 0 });
@@ -110,10 +116,10 @@ test('expanded ramps are traversable through real Rapier movement', async ({ pag
 test('L-shaped corner is traversable through its right entry and lower exit', async ({ page }, testInfo) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
   const traversal = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
     const actor = () => qa.state.actors.find(({ id }) => id === 'attack-human')!;
-    qa.advance(721);
     qa.place('attack-human', { x: 0, y: 1, z: 30 });
 
     qa.command('attack-human', { moveX: 1, yaw: 0 });
@@ -197,9 +203,9 @@ test('defenders hold during freeze then move in the live opening', async ({ page
 test('live bots engage at expanded range through the clear corner lane', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
   const engagement = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
-    qa.advance(721);
     qa.place('attack-human', { x: 14, y: 1, z: -5 });
     qa.place('attack-bot-1', { x: -14, y: 1, z: -40 });
     qa.place('attack-bot-2', { x: -13, y: 1, z: -40 });
@@ -249,10 +255,10 @@ test('weapon switching, recoil, reload, and recoil capture use the game bridge',
   });
   await page.goto('/?qa=1&debug=1');
   await page.getByRole('button', { name: '开始任务' }).click();
+  await advanceToLive(page);
   const shotDiagnostics = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
     document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
-    qa.advance(721);
     qa.command('attack-human', { slot: 2 });
     qa.advance(1);
     const pistol = window.__THREE_GAME_DIAGNOSTICS__!.viewWeapon;
@@ -314,9 +320,9 @@ test('combat HUD and visible bullet tracers reflect authoritative play state', a
   });
   await page.goto('/?qa=1&debug=1');
   await page.getByRole('button', { name: '开始任务' }).click();
+  await advanceToLive(page);
   const activeShot = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
-    qa.advance(721);
     qa.place('attack-human', { x: 14, y: 1, z: 10 });
     qa.place('defense-bot-1', { x: 14, y: 1, z: 4 });
     for (const id of ['attack-bot-1', 'attack-bot-2']) qa.place(id, { x: -14, y: 1, z: 35 });
@@ -375,9 +381,9 @@ test('QA driver is absent without its explicit query gate', async ({ page }) => 
 test('composed plant and defuse immediately begin the next round preparation', async ({ page }) => {
   await page.goto('/?qa=1&debug=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
   const result = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
-    qa.advance(721);
     qa.place('attack-human', { x: -1, y: 3, z: -29 });
     qa.command('attack-human', { interact: true });
     qa.advance(193);
@@ -405,9 +411,9 @@ test('authoritative bomb site has a visible red floor marker during active play'
   await page.waitForFunction(() => Boolean(
     window.__THREE_GAME_QA__ && window.__THREE_BOMB_SITE_MARKER__,
   ));
+  await advanceToLive(page);
   const objective = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
-    qa.advance(721);
     qa.place('attack-human', { x: -1, y: 3, z: -29 });
     qa.command('attack-human', { interact: true });
     qa.advance(193);
@@ -449,9 +455,10 @@ test('authoritative bomb site has a visible red floor marker during active play'
 test('composed timeout awards defense through MatchController', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
   const state = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
-    qa.advance(181 + 6301);
+    qa.advance(6301);
     return qa.state;
   });
   expect(state).toMatchObject({ phase: 'freeze', round: 2, defenseScore: 1 });
@@ -462,10 +469,10 @@ test('composed timeout awards defense through MatchController', async ({ page })
 test('surviving attackers recover and plant the human carrier bomb after human death', async ({ page }) => {
   await page.goto('/?qa=1&debug=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
   const result = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
     const actor = (id: string) => qa.state.actors.find((candidate) => candidate.id === id)!;
-    qa.advance(721);
     qa.place('attack-human', { x: -1, y: 3, z: -29 });
     qa.place('attack-bot-1', { x: -5, y: 3, z: -29 });
     qa.place('attack-bot-2', { x: -14, y: 1, z: 35 });
@@ -523,9 +530,9 @@ test('surviving attackers recover and plant the human carrier bomb after human d
 test('composed WeaponSystem elimination awards attack and begins the next preparation', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
   const state = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
-    qa.advance(721);
     qa.place('attack-human', { x: 14, y: 1, z: 10 });
     for (const teammate of ['attack-bot-1', 'attack-bot-2']) qa.place(teammate, { x: -14, y: 1, z: 25 });
     const defenders = ['defense-bot-1', 'defense-bot-2', 'defense-bot-3'];
@@ -553,6 +560,7 @@ test('composed WeaponSystem elimination awards attack and begins the next prepar
 test('death reconciliation clears combat, navigation, support, and render participation until restart', async ({ page }) => {
   await page.goto('/?qa=1&debug=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
   const result = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
     const fire = (shots: number): void => {
@@ -564,7 +572,6 @@ test('death reconciliation clears combat, navigation, support, and render partic
       }
     };
 
-    qa.advance(721);
     qa.place('attack-human', { x: 14, y: 1, z: 10 });
     qa.place('attack-bot-1', { x: -14, y: 1, z: 25 });
     qa.place('attack-bot-2', { x: -13, y: 1, z: 25 });

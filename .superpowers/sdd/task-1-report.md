@@ -28,3 +28,9 @@
 - Positive `result` values still enter the result phase and are advanced by the existing update branch.
 - A zero-delay resolution resets actors and the bomb in the same authoritative game update because the round number changes immediately.
 - No unrelated production files or generated verification artifacts were changed.
+
+## Review fix
+
+- Replaced all ten stale `qa.advance(721)` setup calls with the shared semantic `ADVANCE_TO_LIVE_TICKS = 3 * 60 + 1` boundary through an `advanceToLive(page)` helper.
+- Confirmed the browser suite contains no remaining 600/720/721-tick freeze assumptions or five-second result-delay waits.
+- Re-ran verification after the review fix: Playwright 16/16, Vitest 119/119, build, and `git diff --check` all passed.
