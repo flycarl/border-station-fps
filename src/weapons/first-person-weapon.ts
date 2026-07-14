@@ -19,6 +19,9 @@ export interface FirstPersonWeaponDiagnostics {
 }
 
 const BASE_POSITION = new THREE.Vector3(0.36, -0.32, -0.68);
+const RIFLE_LOCAL_POSITION = new THREE.Vector3(0, 0, 0);
+const PISTOL_LOCAL_POSITION = new THREE.Vector3(0.02, -0.02, -0.06);
+const WALK_SWAY_RATE = 7.5;
 
 function prepareMaterial(material: THREE.Material): THREE.Material {
   material.depthTest = false;
@@ -83,7 +86,7 @@ function createRifle(materials: WeaponMaterials): THREE.Group {
 function createPistol(materials: WeaponMaterials): THREE.Group {
   const pistol = new THREE.Group();
   pistol.name = 'pistol';
-  pistol.position.set(0.02, -0.02, -0.06);
+  pistol.position.copy(PISTOL_LOCAL_POSITION);
 
   addMesh(pistol, 'pistol-slide', new THREE.BoxGeometry(0.13, 0.105, 0.42), materials.metal,
     [0, 0.06, -0.32]);
@@ -127,6 +130,7 @@ export class FirstPersonWeaponRig {
   private readonly rifle: THREE.Group;
   private readonly pistol: THREE.Group;
   private time = 0;
+  private movementBlend = 0;
   private recoil = 0;
   private reloadBlend = 0;
   private weaponId: WeaponId = 'vanguard-rifle';
@@ -148,17 +152,26 @@ export class FirstPersonWeaponRig {
     this.weaponId = state.weaponId;
     this.rifle.visible = state.weaponId === 'vanguard-rifle';
     this.pistol.visible = state.weaponId === 'sidearm-9';
+    this.rifle.position.copy(RIFLE_LOCAL_POSITION);
+    this.rifle.rotation.set(0, 0, 0);
+    this.pistol.position.copy(PISTOL_LOCAL_POSITION);
+    this.pistol.rotation.set(0, 0, 0);
     if (!state.alive) return;
 
-    this.time += step * (state.movement > 0.05 ? 10 : 2);
-    if (state.fired) this.recoil = 1;
-    else this.recoil = Math.max(0, this.recoil - step * 9);
+    const movementTarget = state.paused ? 0 : Math.min(1, Math.max(0, state.movement));
+    this.movementBlend += (movementTarget - this.movementBlend) * (1 - Math.exp(-step * 8));
+    if (!state.paused && this.movementBlend > 0.01) this.time += step * WALK_SWAY_RATE;
+    if (state.fired) {
+      const kick = state.weaponId === 'vanguard-rifle' ? 0.72 : 0.52;
+      this.recoil = Math.min(1.8, this.recoil + kick);
+    }
+    this.recoil *= Math.exp(-step * 8);
     const reloadTarget = state.reloading ? 1 : 0;
     this.reloadBlend += (reloadTarget - this.reloadBlend) * (1 - Math.exp(-step * 10));
 
-    const motionScale = state.paused ? 0 : Math.min(1, Math.max(0, state.movement));
-    const swayX = Math.sin(this.time * 8) * 0.02 * motionScale;
-    const swayY = Math.abs(Math.cos(this.time * 8)) * 0.013 * motionScale;
+    const motionScale = state.paused ? 0 : this.movementBlend;
+    const swayX = Math.sin(this.time) * 0.008 * motionScale;
+    const swayY = Math.abs(Math.cos(this.time)) * 0.0052 * motionScale;
     this.root.position.set(
       BASE_POSITION.x + swayX,
       BASE_POSITION.y - swayY - this.reloadBlend * 0.08,
@@ -171,14 +184,11 @@ export class FirstPersonWeaponRig {
     );
 
     for (const weapon of [this.rifle, this.pistol]) {
-      weapon.position.z = this.recoil * 0.09;
-      weapon.position.y = this.recoil * -0.025;
+      weapon.position.z += this.recoil * 0.09;
+      weapon.position.y -= this.recoil * 0.025;
       weapon.rotation.x = this.recoil * -0.08;
       weapon.rotation.z = -this.reloadBlend * 0.65;
     }
-    this.pistol.position.x = 0.02;
-    this.pistol.position.y += -0.02;
-    this.pistol.position.z += -0.06;
   }
 
   diagnostics(): FirstPersonWeaponDiagnostics {
