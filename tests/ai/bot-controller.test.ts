@@ -30,28 +30,35 @@ it('does not fire at an occluded enemy', () => {
   expect(command.fire).toBe(false);
 });
 
-it('requires both range and the 100-degree view cone to engage', () => {
+it('requires both range and the 120-degree view cone to engage', () => {
   const outOfCone = new BotController('bot-cone', 'defense', 3);
   const outOfRange = new BotController('bot-range', 'defense', 3);
+  const widenedCone = new BotController('bot-wide-cone', 'defense', 3);
 
   const coneCommand = outOfCone.update({
     ...baseContext(),
-    enemies: [{ id: 'enemy', position: { x: 10, y: 0, z: -1 }, alive: true }],
+    enemies: [{ id: 'enemy', position: { x: 10, y: 0, z: -5 }, alive: true }],
     dt: 1,
   });
   const rangeCommand = outOfRange.update({
     ...baseContext(),
-    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -31 }, alive: true }],
+    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -43 }, alive: true }],
+    dt: 1,
+  });
+  const widenedConeCommand = widenedCone.update({
+    ...baseContext(),
+    enemies: [{ id: 'enemy', position: { x: 10, y: 0, z: -7 }, alive: true }],
     dt: 1,
   });
 
   expect(coneCommand.fire).toBe(false);
   expect(rangeCommand.fire).toBe(false);
+  expect(widenedConeCommand.fire).toBe(true);
 });
 
 // The final seed produces a first PRNG sample of 0.9999999997671694.
 it.each([0, 1, 7, 653_637_408])(
-  'waits at least 0.25 seconds and fires by exactly 0.55 seconds for seed %i',
+  'waits at least 0.16 seconds and fires by exactly 0.38 seconds for seed %i',
   (seed) => {
     const earlyBot = new BotController('bot-early', 'defense', seed);
     const boundaryBot = new BotController('bot-boundary', 'defense', seed);
@@ -60,10 +67,26 @@ it.each([0, 1, 7, 653_637_408])(
       enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
     };
 
-    expect(earlyBot.update({ ...context, dt: 0.249_999 }).fire).toBe(false);
-    expect(boundaryBot.update({ ...context, dt: 0.55 }).fire).toBe(true);
+    expect(earlyBot.update({ ...context, dt: 0.159_999 }).fire).toBe(false);
+    expect(boundaryBot.update({ ...context, dt: 0.38 }).fire).toBe(true);
   },
 );
+
+it('keeps pressure with deterministic advance and strafe movement while engaging at range', () => {
+  const first = new BotController('bot-pressure', 'defense', 7);
+  const second = new BotController('bot-pressure', 'defense', 7);
+  const context = {
+    ...baseContext(),
+    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -30 }, alive: true }],
+    dt: 0.2,
+  };
+
+  const firstCommand = first.update(context);
+  const secondCommand = second.update(context);
+  expect(firstCommand.moveZ).toBeLessThan(0);
+  expect(Math.abs(firstCommand.moveX)).toBeGreaterThan(0);
+  expect(firstCommand).toEqual(secondCommand);
+});
 
 it('returns a complete command and normalized movement toward a nav target', () => {
   const bot = new BotController('bot-1', 'attack', 7);

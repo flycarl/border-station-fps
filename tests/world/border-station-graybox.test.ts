@@ -14,6 +14,28 @@ it('has separated spawns, a reachable site, ramp, and cover', () => {
   expect(map.navNodes.some((node) => node.tags.includes('site'))).toBe(true);
 });
 
+it('expands the combat footprint and offers two authored routes', () => {
+  const map = createBorderStationGraybox();
+  const floor = map.solids.find((solid) => solid.id === 'floor');
+  const ramps = map.solids.filter((solid) => solid.kind === 'ramp');
+  const covers = map.solids.filter((solid) => solid.kind === 'cover');
+  const attackSpawn = map.navNodes.find((node) => node.id === 'attack');
+
+  expect(floor?.size.x).toBeGreaterThanOrEqual(34);
+  expect(floor?.size.z).toBeGreaterThanOrEqual(90);
+  expect(ramps).toHaveLength(2);
+  expect(covers.length).toBeGreaterThanOrEqual(5);
+  expect(attackSpawn?.neighbors).toEqual(expect.arrayContaining(['mid-left', 'mid-right']));
+  expect(map.navNodes.find((node) => node.id === 'mid-left')?.neighbors)
+    .toContain('site-left');
+  expect(map.navNodes.find((node) => node.id === 'mid-right')?.neighbors)
+    .toContain('site-right');
+
+  const attackZ = map.spawns.find((spawn) => spawn.team === 'attack')!.position.z;
+  const defenseZ = map.spawns.find((spawn) => spawn.team === 'defense')!.position.z;
+  expect(attackZ - defenseZ).toBeGreaterThanOrEqual(70);
+});
+
 it('raises the main ramp along the attack-to-site direction', () => {
   const map = createBorderStationGraybox();
   const ramp = map.solids.find((solid) => solid.id === 'ramp-main');

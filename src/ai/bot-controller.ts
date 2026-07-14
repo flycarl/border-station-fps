@@ -31,9 +31,10 @@ export interface BotContext {
 
 type BotState = 'advance' | 'engage' | 'plant' | 'hold' | 'defuse';
 
-const MAX_ENGAGE_DISTANCE = 30;
-const VIEW_CONE_COSINE = Math.cos((100 * Math.PI / 180) / 2);
+const MAX_ENGAGE_DISTANCE = 42;
+const VIEW_CONE_COSINE = Math.cos((120 * Math.PI / 180) / 2);
 const INTERACT_DISTANCE = 1.5;
+const PRESSURE_DISTANCE = 15;
 
 const distance = (left: Vec3, right: Vec3): number => Math.hypot(
   left.x - right.x,
@@ -54,6 +55,7 @@ export class BotController {
   private reactionDelay = 0.25;
   private aimErrorYaw = 0;
   private aimErrorPitch = 0;
+  private strafeDirection = 1;
 
   constructor(
     readonly id: EntityId,
@@ -76,6 +78,7 @@ export class BotController {
       this.updateEngagement(enemy.id, Math.max(0, context.dt));
       this.state = 'engage';
       this.aimAt(command, context.self.position, enemy.position);
+      this.moveWhileEngaging(command, context.self.position, enemy.position);
       command.fire = this.reactionElapsed >= this.reactionDelay;
       return command;
     }
@@ -122,9 +125,10 @@ export class BotController {
     if (this.targetId !== targetId) {
       this.targetId = targetId;
       this.reactionElapsed = 0;
-      this.reactionDelay = 0.25 + this.random() * 0.3;
-      this.aimErrorYaw = (this.random() * 2 - 1) * 0.025;
-      this.aimErrorPitch = (this.random() * 2 - 1) * 0.015;
+      this.reactionDelay = 0.16 + this.random() * 0.22;
+      this.aimErrorYaw = (this.random() * 2 - 1) * 0.014;
+      this.aimErrorPitch = (this.random() * 2 - 1) * 0.009;
+      this.strafeDirection = this.random() < 0.5 ? -1 : 1;
     }
     this.reactionElapsed += dt;
   }
@@ -135,6 +139,11 @@ export class BotController {
     const dz = to.z - from.z;
     command.yaw = aimYaw(from, to) + this.aimErrorYaw;
     command.pitch = Math.atan2(dy, Math.hypot(dx, dz)) + this.aimErrorPitch;
+  }
+
+  private moveWhileEngaging(command: PlayerCommand, from: Vec3, to: Vec3): void {
+    command.moveX = 0.42 * this.strafeDirection;
+    if (distance(from, to) > PRESSURE_DISTANCE) command.moveZ = -0.4;
   }
 
   private moveForObjective(command: PlayerCommand, context: BotContext): void {
