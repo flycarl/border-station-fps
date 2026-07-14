@@ -4,9 +4,17 @@ import {
   cloneGameSnapshot,
   createGameRoster,
   selectRoundBombCarrier,
+  selectViewActor,
   STEP_ORDER,
   type GameSnapshot,
 } from '../src/game';
+
+const actor = (
+  id: string,
+  team: 'attack' | 'defense',
+  position: { x: number; y: number; z: number },
+  alive = true,
+) => ({ id, team, position, health: alive ? 100 : 0, alive });
 
 it('composes one fixed step in the required deterministic order', () => {
   expect(STEP_ORDER).toEqual([
@@ -47,6 +55,37 @@ it('selects one deterministic attacker bomb carrier with round-seeded variety', 
   expect(replay).toEqual(firstPass);
   expect(firstPass.every((id) => attackerIds.has(id))).toBe(true);
   expect(new Set(firstPass)).toEqual(attackerIds);
+});
+
+it('keeps the view on the human attacker while the human is alive', () => {
+  const actors = [
+    actor('attack-human', 'attack', { x: 0, y: 1, z: 10 }),
+    actor('attack-bot-1', 'attack', { x: 1, y: 1, z: 10 }),
+  ];
+
+  expect(selectViewActor(actors, 'attack-human')).toBe('attack-human');
+});
+
+it('follows the nearest living attacker after the human dies', () => {
+  const actors = [
+    actor('attack-human', 'attack', { x: 0, y: 1, z: 10 }, false),
+    actor('attack-bot-1', 'attack', { x: 8, y: 1, z: 10 }),
+    actor('attack-bot-2', 'attack', { x: 2, y: 1, z: 10 }),
+    actor('defense-bot-1', 'defense', { x: 1, y: 1, z: 10 }),
+  ];
+
+  expect(selectViewActor(actors, 'attack-human')).toBe('attack-bot-2');
+});
+
+it('follows a living defender when no attackers survive', () => {
+  const actors = [
+    actor('attack-human', 'attack', { x: 0, y: 1, z: 10 }, false),
+    actor('attack-bot-1', 'attack', { x: 1, y: 1, z: 10 }, false),
+    actor('defense-bot-1', 'defense', { x: 9, y: 1, z: 10 }),
+    actor('defense-bot-2', 'defense', { x: 3, y: 1, z: 10 }),
+  ];
+
+  expect(selectViewActor(actors, 'attack-human')).toBe('defense-bot-2');
 });
 
 it('starts visual tracers in front of and beside the camera at the muzzle', () => {

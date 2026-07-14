@@ -201,6 +201,9 @@ export class BotSquad {
     const from = context.nav.nearest(actor.position);
     const path = context.nav.findPath(from.id, site.id);
     const nextId = path[1] ?? path[0] ?? site.id;
-    return context.nav.nodes.find(({ id }) => id === nextId)?.position ?? site.position;
+    const target = context.nav.nodes.find(({ id }) => id === nextId)?.position ?? site.position;
+    return objective === 'plant' && nextId === site.id
+      ? { ...target, y: actor.position.y }
+      : target;
   }
 }

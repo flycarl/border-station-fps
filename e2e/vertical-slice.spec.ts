@@ -412,6 +412,65 @@ test('composed timeout awards defense through MatchController', async ({ page })
   expect(state).toMatchObject({ phase: 'result', defenseScore: 1 });
 });
 
+test('surviving attackers recover and plant the human carrier bomb after human death', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  const result = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const actor = (id: string) => qa.state.actors.find((candidate) => candidate.id === id)!;
+    qa.advance(721);
+    qa.place('attack-human', { x: -1, y: 3, z: -29 });
+    qa.place('attack-bot-1', { x: -5, y: 3, z: -29 });
+    qa.place('attack-bot-2', { x: -14, y: 1, z: 35 });
+    qa.place('defense-bot-1', { x: -1, y: 3, z: -24 });
+    qa.place('defense-bot-2', { x: 14, y: 1, z: 40 });
+    qa.place('defense-bot-3', { x: 13, y: 1, z: 40 });
+
+    for (let shot = 0; shot < 5 && actor('attack-human').alive; shot++) {
+      qa.command('defense-bot-1', { fire: true, slot: 1, yaw: 0, pitch: 0 });
+      qa.advance(1);
+      qa.command('defense-bot-1', { fire: false, slot: 1, yaw: 0, pitch: 0 });
+      qa.advance(7);
+    }
+    qa.advance(1);
+    const deadHuman = { ...actor('attack-human') };
+    const dropped = qa.bomb;
+
+    for (const defender of ['defense-bot-1', 'defense-bot-2', 'defense-bot-3']) {
+      qa.place(defender, { x: 14, y: 1, z: 40 });
+    }
+    const botStart = { ...actor('attack-bot-1').position };
+    qa.useLiveCommands();
+    const observedBombStates = new Set<string>([qa.bomb.state]);
+    let maximumBotDisplacement = 0;
+    for (let tick = 0; tick < 900 && qa.bomb.state !== 'planted'; tick++) {
+      qa.advance(1);
+      observedBombStates.add(qa.bomb.state);
+      const position = actor('attack-bot-1').position;
+      maximumBotDisplacement = Math.max(maximumBotDisplacement, Math.hypot(
+        position.x - botStart.x,
+        position.z - botStart.z,
+      ));
+    }
+
+    return {
+      deadHuman,
+      dropped,
+      planted: qa.bomb,
+      observedBombStates: [...observedBombStates],
+      maximumBotDisplacement,
+      viewActorId: qa.viewActorId,
+    };
+  });
+
+  expect(result.deadHuman.alive).toBe(false);
+  expect(result.dropped).toMatchObject({ state: 'dropped', carrierId: null });
+  expect(result.maximumBotDisplacement).toBeGreaterThan(1);
+  expect(result.observedBombStates).toContain('carried');
+  expect(result.planted.state).toBe('planted');
+  expect(result.viewActorId).toBe('attack-bot-1');
+});
+
 test('composed WeaponSystem elimination awards attack', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
