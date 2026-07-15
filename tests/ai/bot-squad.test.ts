@@ -207,9 +207,32 @@ it('steers a displaced retriever back to the authored corridor before advancing'
   expect(commands.get('attack-1')?.yaw).toBeCloseTo(Math.PI / 2);
 });
 
+it.each([
+  ['normal attacker', null],
+  ['bomb carrier', 'attack-1'],
+] as const)('steers a displaced %s back to the authored corridor before advancing', (
+  _description,
+  carrierId,
+) => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-1')!.position = { x: 4, y: 3, z: 10 };
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb({ carrierId }),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  expect(commands.get('attack-1')).toMatchObject({ moveZ: -1, interact: false });
+  expect(commands.get('attack-1')?.yaw).toBeCloseTo(Math.PI / 2);
+});
+
 it('makes an attack-bot carrier plant when it reaches the bomb site', () => {
   const views = actors();
-  views.find(({ id }) => id === 'attack-2')!.position = { x: 0, y: 0, z: 0 };
+  views.find(({ id }) => id === 'attack-2')!.position = { x: 0, y: 3, z: 0 };
   const commands = new BotSquad(ids).sample({
     round: 3,
     phase: 'live',
@@ -309,6 +332,26 @@ it('does not move, fire, or interact outside active match phases', () => {
       interact: false,
     });
   }
+});
+
+it('clears active recovery during an inactive phase before movement resumes', () => {
+  const squad = new BotSquad(ids);
+  const context = {
+    round: 1,
+    phase: 'live' as const,
+    actors: actors(),
+    bomb: bomb(),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  };
+  const liveCommands = Array.from({ length: 30 }, () => squad.sample(context));
+
+  squad.sample({ ...context, phase: 'freeze' });
+  const resumed = Array.from({ length: 29 }, () => squad.sample(context));
+
+  expect(Math.abs(liveCommands[29]!.get('attack-1')?.moveX ?? 0)).toBe(1);
+  expect(resumed.every((commands) => commands.get('attack-1')?.moveX === 0)).toBe(true);
 });
 
 it('moves live defenders toward distinct left, center, and right site anchors', () => {

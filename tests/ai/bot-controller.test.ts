@@ -334,7 +334,7 @@ it('recovers engagement movement without changing aim or fire state', () => {
   expect(stuckCommand.fire).toBe(progressingCommand.fire);
 });
 
-it('keeps recovery active for the full 0.6 seconds despite lateral displacement', () => {
+it('ends recovery immediately after the full 0.6 seconds', () => {
   const bot = new BotController('persistent-recovery', 'attack', 7);
   const context = {
     ...baseContext(),
@@ -355,4 +355,52 @@ it('keeps recovery active for the full 0.6 seconds despite lateral displacement'
   expect(recoveryCommands.every(({ moveX, moveZ }) => (
     Math.abs(moveX) === 1 && moveZ === 0
   ))).toBe(true);
+  expect(bot.update({
+    ...context,
+    self: {
+      ...context.self,
+      position: { x: 0.06, y: 0, z: 0 },
+    },
+  })).toMatchObject({ moveX: 0, moveZ: -1 });
 });
+
+it('alternates the lateral direction on a subsequent recovery', () => {
+  const bot = new BotController('alternating-recovery', 'attack', 7);
+  const context = {
+    ...baseContext(),
+    objective: 'advance' as const,
+    targetNode: { x: 0, y: 0, z: -20 },
+    dt: 0.1,
+  };
+
+  const firstRecovery = Array.from({ length: 5 }, () => bot.update(context))[4]!;
+  for (let sample = 0; sample < 5; sample++) bot.update(context);
+  const nextStallCommands = Array.from({ length: 5 }, () => bot.update(context));
+  const secondRecovery = nextStallCommands[4]!;
+
+  expect(nextStallCommands.slice(0, 4).every(({ moveX }) => moveX === 0)).toBe(true);
+  expect(secondRecovery.moveX).toBe(-firstRecovery.moveX);
+  expect(secondRecovery.moveZ).toBe(0);
+});
+
+it.each(['dead', 'stationary'] as const)(
+  'clears active recovery during the %s lifecycle before movement resumes',
+  (lifecycle) => {
+    const bot = new BotController('lifecycle-recovery', 'attack', 7);
+    const movingContext = {
+      ...baseContext(),
+      objective: 'advance' as const,
+      targetNode: { x: 0, y: 0, z: -20 },
+      dt: 0.1,
+    };
+    const activeRecovery = Array.from({ length: 5 }, () => bot.update(movingContext))[4]!;
+
+    bot.update(lifecycle === 'dead'
+      ? { ...movingContext, self: { ...movingContext.self, alive: false } }
+      : { ...movingContext, objective: 'hold', targetNode: movingContext.self.position });
+    const resumed = Array.from({ length: 4 }, () => bot.update(movingContext));
+
+    expect(Math.abs(activeRecovery.moveX)).toBe(1);
+    expect(resumed.every(({ moveX, moveZ }) => moveX === 0 && moveZ === -1)).toBe(true);
+  },
+);

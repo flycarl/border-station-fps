@@ -205,6 +205,7 @@ export class BotSquad {
         ?? site.position;
     }
     const from = context.nav.nearest(actor.position);
+    if (planarDistance(actor.position, from.position) > 2.0) return from.position;
     const path = context.nav.findPath(from.id, site.id);
     const nextId = path[1] ?? path[0] ?? site.id;
     const target = context.nav.nodes.find(({ id }) => id === nextId)?.position ?? site.position;
