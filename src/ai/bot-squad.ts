@@ -46,9 +46,15 @@ const distance = (left: Vec3, right: Vec3): number => Math.hypot(
   left.z - right.z,
 );
 
+const planarDistance = (left: Vec3, right: Vec3): number => Math.hypot(
+  left.x - right.x,
+  left.z - right.z,
+);
+
 const routeToward = (nav: NavGraph, from: Vec3, target: Vec3): Vec3 => {
   const start = nav.nearest(from);
   const goal = nav.nearest(target);
+  if (planarDistance(from, start.position) > 2.0) return start.position;
   if (start.id === goal.id) return target;
   const path = nav.findPath(start.id, goal.id);
   const nextId = path[1] ?? path[0] ?? goal.id;

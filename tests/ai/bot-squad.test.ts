@@ -189,6 +189,24 @@ it('routes the dropped-bomb retriever through the navigation graph', () => {
   expect(commands.get('attack-1')?.yaw).toBeCloseTo(0);
 });
 
+it('steers a displaced retriever back to the authored corridor before advancing', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-1')!.position = { x: 4, y: 0, z: 10 };
+  views.find(({ id }) => id === 'attack-2')!.position = { x: 8, y: 0, z: 10 };
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb({ state: 'dropped', carrierId: null, position: { x: -5, y: 0, z: 0 } }),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  expect(commands.get('attack-1')).toMatchObject({ moveZ: -1, interact: false });
+  expect(commands.get('attack-1')?.yaw).toBeCloseTo(Math.PI / 2);
+});
+
 it('makes an attack-bot carrier plant when it reaches the bomb site', () => {
   const views = actors();
   views.find(({ id }) => id === 'attack-2')!.position = { x: 0, y: 0, z: 0 };
