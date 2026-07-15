@@ -42,6 +42,7 @@ const AIM_ERROR_PITCH_BOUND = 0.020;
 const MIN_PLANAR_PROGRESS = 0.01;
 const STALL_TRIGGER_TIME = 0.5;
 const RECOVERY_DURATION = 0.6;
+const STALL_COMPARISON_EPSILON = 1e-12;
 
 const distance = (left: Vec3, right: Vec3): number => Math.hypot(
   left.x - right.x,
@@ -219,7 +220,7 @@ export class BotController {
         context.self.position.x - this.previousPositionX,
         context.self.position.z - this.previousPositionZ,
       );
-      this.stallElapsed = progress >= MIN_PLANAR_PROGRESS
+      this.stallElapsed = progress + STALL_COMPARISON_EPSILON >= MIN_PLANAR_PROGRESS
         ? 0
         : this.stallElapsed + dt;
     } else {
@@ -227,7 +228,7 @@ export class BotController {
     }
     this.rememberPosition(context.self.position);
 
-    if (this.stallElapsed >= STALL_TRIGGER_TIME) {
+    if (this.stallElapsed + STALL_COMPARISON_EPSILON >= STALL_TRIGGER_TIME) {
       this.recoveryDirection = this.nextRecoveryDirection;
       this.nextRecoveryDirection *= -1;
       this.recoveryRemaining = Math.max(0, RECOVERY_DURATION - dt);

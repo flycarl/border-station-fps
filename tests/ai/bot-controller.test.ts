@@ -241,6 +241,48 @@ it('resets accumulated stall time after meaningful planar displacement', () => {
   expect(afterReset.every(({ moveX }) => moveX === 0)).toBe(true);
 });
 
+it('treats 0.05 to 0.06 as the exact 0.01 minimum planar progress', () => {
+  const bot = new BotController('decimal-progress', 'attack', 7);
+  const context = {
+    ...baseContext(),
+    self: {
+      ...baseContext().self,
+      position: { x: 0.05, y: 0, z: 0 },
+    },
+    objective: 'advance' as const,
+    targetNode: { x: 0, y: 0, z: -20 },
+    dt: 0.1,
+  };
+
+  for (let sample = 0; sample < 4; sample++) bot.update(context);
+  const atBoundary = bot.update({
+    ...context,
+    self: {
+      ...context.self,
+      position: { x: 0.06, y: 0, z: 0 },
+    },
+  });
+
+  expect(atBoundary.moveX).toBe(0);
+  expect(atBoundary.moveZ).toBe(-1);
+});
+
+it('starts recovery on tick 30 at the production 60 Hz timestep', () => {
+  const bot = new BotController('sixty-hertz-stall', 'attack', 7);
+  const context = {
+    ...baseContext(),
+    objective: 'advance' as const,
+    targetNode: { x: 0, y: 0, z: -20 },
+    dt: 1 / 60,
+  };
+
+  const commands = Array.from({ length: 30 }, () => bot.update(context));
+
+  expect(commands.slice(0, 29).every(({ moveX }) => moveX === 0)).toBe(true);
+  expect(Math.abs(commands[29]!.moveX)).toBe(1);
+  expect(commands[29]!.moveZ).toBe(0);
+});
+
 it('never accumulates recovery while holding an interaction command', () => {
   const bot = new BotController('stationary-interaction', 'attack', 7);
   const interactionContext = {
