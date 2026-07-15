@@ -39,6 +39,9 @@ const PRESSURE_DISTANCE = 15;
 const AIM_ERROR_INTERVAL = 0.35;
 const AIM_ERROR_YAW_BOUND = 0.035;
 const AIM_ERROR_PITCH_BOUND = 0.020;
+const MIN_PLANAR_PROGRESS = 0.01;
+const STALL_TRIGGER_TIME = 0.5;
+const RECOVERY_DURATION = 0.6;
 
 const distance = (left: Vec3, right: Vec3): number => Math.hypot(
   left.x - right.x,
@@ -51,6 +54,12 @@ const aimYaw = (from: Vec3, to: Vec3): number => Math.atan2(
   -(to.z - from.z),
 );
 
+const stableIdParity = (id: EntityId): number => {
+  let parity = 0;
+  for (let index = 0; index < id.length; index++) parity ^= id.charCodeAt(index);
+  return parity & 1;
+};
+
 export class BotController {
   private randomState = 0;
   private state: BotState = 'advance';
@@ -61,6 +70,13 @@ export class BotController {
   private aimErrorPitch = 0;
   private aimErrorElapsed = 0;
   private strafeDirection = 1;
+  private previousPositionX = 0;
+  private previousPositionZ = 0;
+  private hasPreviousPosition = false;
+  private stallElapsed = 0;
+  private recoveryRemaining = 0;
+  private recoveryDirection = 1;
+  private nextRecoveryDirection = 1;
 
   constructor(
     readonly id: EntityId,
@@ -75,6 +91,7 @@ export class BotController {
     command.yaw = context.self.yaw;
     if (!context.self.alive) {
       this.clearEngagement();
+      this.resetStuckRecovery();
       return command;
     }
 
@@ -85,19 +102,21 @@ export class BotController {
       this.aimAt(command, context.self.position, enemy.position);
       this.moveWhileEngaging(command, context.self.position, enemy.position);
       command.fire = this.reactionElapsed >= this.reactionDelay;
-      return command;
+      return this.applyStuckRecovery(command, context);
     }
 
     this.clearEngagement();
     this.state = context.objective;
     this.moveForObjective(command, context);
-    return command;
+    return this.applyStuckRecovery(command, context);
   }
 
   reset(seed: number): void {
     this.randomState = seed >>> 0;
     this.state = 'advance';
     this.clearEngagement();
+    this.resetStuckRecovery();
+    this.nextRecoveryDirection = ((seed >>> 0) ^ stableIdParity(this.id)) & 1 ? 1 : -1;
   }
 
   private random(): number {
@@ -178,6 +197,57 @@ export class BotController {
       return;
     }
     if (planarDistance > 0.1) command.moveZ = -1;
+  }
+
+  private applyStuckRecovery(command: PlayerCommand, context: BotContext): PlayerCommand {
+    if (Math.hypot(command.moveX, command.moveZ) === 0) {
+      this.resetStuckRecovery();
+      return command;
+    }
+
+    const dt = Math.max(0, context.dt);
+    if (this.recoveryRemaining > Number.EPSILON) {
+      command.moveX = this.recoveryDirection;
+      command.moveZ = 0;
+      this.recoveryRemaining = Math.max(0, this.recoveryRemaining - dt);
+      this.rememberPosition(context.self.position);
+      return command;
+    }
+
+    if (this.hasPreviousPosition) {
+      const progress = Math.hypot(
+        context.self.position.x - this.previousPositionX,
+        context.self.position.z - this.previousPositionZ,
+      );
+      this.stallElapsed = progress >= MIN_PLANAR_PROGRESS
+        ? 0
+        : this.stallElapsed + dt;
+    } else {
+      this.stallElapsed = dt;
+    }
+    this.rememberPosition(context.self.position);
+
+    if (this.stallElapsed >= STALL_TRIGGER_TIME) {
+      this.recoveryDirection = this.nextRecoveryDirection;
+      this.nextRecoveryDirection *= -1;
+      this.recoveryRemaining = Math.max(0, RECOVERY_DURATION - dt);
+      this.stallElapsed = 0;
+      command.moveX = this.recoveryDirection;
+      command.moveZ = 0;
+    }
+    return command;
+  }
+
+  private rememberPosition(position: Vec3): void {
+    this.previousPositionX = position.x;
+    this.previousPositionZ = position.z;
+    this.hasPreviousPosition = true;
+  }
+
+  private resetStuckRecovery(): void {
+    this.hasPreviousPosition = false;
+    this.stallElapsed = 0;
+    this.recoveryRemaining = 0;
   }
 
   private clearEngagement(): void {

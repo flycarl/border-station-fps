@@ -199,3 +199,118 @@ it('replays the same first command after resetting to the same seed', () => {
 
   expect(bot.update(context)).toEqual(first);
 });
+
+it('starts deterministic lateral recovery after 0.5 seconds without planar progress', () => {
+  const first = new BotController('stuck-objective', 'attack', 7);
+  const replay = new BotController('stuck-objective', 'attack', 7);
+  const context = {
+    ...baseContext(),
+    objective: 'advance' as const,
+    targetNode: { x: 0, y: 0, z: -20 },
+    dt: 0.1,
+  };
+
+  const commands = Array.from({ length: 5 }, () => first.update(context));
+  const replayCommands = Array.from({ length: 5 }, () => replay.update(context));
+
+  expect(commands.slice(0, 4).every(({ moveX }) => moveX === 0)).toBe(true);
+  expect(Math.abs(commands[4]!.moveX)).toBe(1);
+  expect(commands[4]!.moveZ).toBe(0);
+  expect(replayCommands).toEqual(commands);
+});
+
+it('resets accumulated stall time after meaningful planar displacement', () => {
+  const bot = new BotController('moving-objective', 'attack', 7);
+  const context = {
+    ...baseContext(),
+    objective: 'advance' as const,
+    targetNode: { x: 0, y: 0, z: -20 },
+    dt: 0.1,
+  };
+
+  for (let sample = 0; sample < 4; sample++) bot.update(context);
+  bot.update({
+    ...context,
+    self: { ...context.self, position: { x: 0.01, y: 0, z: 0 } },
+  });
+  const afterReset = Array.from({ length: 4 }, () => bot.update({
+    ...context,
+    self: { ...context.self, position: { x: 0.01, y: 0, z: 0 } },
+  }));
+
+  expect(afterReset.every(({ moveX }) => moveX === 0)).toBe(true);
+});
+
+it('never accumulates recovery while holding an interaction command', () => {
+  const bot = new BotController('stationary-interaction', 'attack', 7);
+  const interactionContext = {
+    ...baseContext(),
+    objective: 'plant' as const,
+    targetNode: { x: 1, y: 0, z: 0 },
+    dt: 0.1,
+  };
+
+  const interactions = Array.from({ length: 10 }, () => bot.update(interactionContext));
+  const movement = Array.from({ length: 4 }, () => bot.update({
+    ...interactionContext,
+    objective: 'advance' as const,
+    targetNode: { x: 0, y: 0, z: -20 },
+  }));
+
+  expect(interactions.every(({ interact, moveX, moveZ }) => (
+    interact && moveX === 0 && moveZ === 0
+  ))).toBe(true);
+  expect(movement.every(({ moveX }) => moveX === 0)).toBe(true);
+});
+
+it('recovers engagement movement without changing aim or fire state', () => {
+  const stuck = new BotController('stuck-engagement', 'defense', 17);
+  const progressing = new BotController('stuck-engagement', 'defense', 17);
+  const context = {
+    ...baseContext(),
+    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -30 }, alive: true }],
+    dt: 0.1,
+  };
+  let stuckCommand = stuck.update(context);
+  let progressingCommand = progressing.update(context);
+  for (let sample = 1; sample < 5; sample++) {
+    stuckCommand = stuck.update(context);
+    progressingCommand = progressing.update({
+      ...context,
+      self: {
+        ...context.self,
+        position: { x: sample * 0.01, y: 0, z: 0 },
+      },
+      enemies: [{ id: 'enemy', position: { x: sample * 0.01, y: 0, z: -30 }, alive: true }],
+    });
+  }
+
+  expect(Math.abs(stuckCommand.moveX)).toBe(1);
+  expect(stuckCommand.moveZ).toBe(0);
+  expect(stuckCommand.yaw).toBe(progressingCommand.yaw);
+  expect(stuckCommand.pitch).toBe(progressingCommand.pitch);
+  expect(stuckCommand.fire).toBe(progressingCommand.fire);
+});
+
+it('keeps recovery active for the full 0.6 seconds despite lateral displacement', () => {
+  const bot = new BotController('persistent-recovery', 'attack', 7);
+  const context = {
+    ...baseContext(),
+    objective: 'advance' as const,
+    targetNode: { x: 0, y: 0, z: -20 },
+    dt: 0.1,
+  };
+  for (let sample = 0; sample < 5; sample++) bot.update(context);
+
+  const recoveryCommands = Array.from({ length: 5 }, (_, sample) => bot.update({
+    ...context,
+    self: {
+      ...context.self,
+      position: { x: (sample + 1) * 0.01, y: 0, z: 0 },
+    },
+  }));
+
+  expect(recoveryCommands.every(({ moveX, moveZ }) => (
+    Math.abs(moveX) === 1 && moveZ === 0
+  ))).toBe(true);
+});

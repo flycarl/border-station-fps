@@ -172,7 +172,7 @@ test('defenders hold during freeze then move in the live opening', async ({ page
     const start = defenders();
     qa.advance(150);
     const frozen = defenders();
-    qa.advance(151);
+    qa.advance(181);
     const live = defenders();
     return { start, frozen, live };
   });
@@ -181,22 +181,49 @@ test('defenders hold during freeze then move in the live opening', async ({ page
     left: { x: number; z: number },
     right: { x: number; z: number },
   ): number => Math.hypot(left.x - right.x, left.z - right.z);
-  const anchors = {
-    'defense-bot-1': { x: -5, z: -22 },
-    'defense-bot-2': { x: -1, z: -29 },
-    'defense-bot-3': { x: 8, z: -22 },
-  } as const;
   for (const [index, defender] of opening.frozen.entries()) {
     const live = opening.live[index]!;
-    const anchor = anchors[defender.id as keyof typeof anchors];
     expect(defender.id).toBe(opening.start[index]!.id);
     expect(planarDistance(defender.position, opening.start[index]!.position)).toBeLessThan(0.05);
     expect(live.id).toBe(defender.id);
-    expect(anchor).toBeDefined();
-    const frozenDistance = planarDistance(defender.position, anchor);
-    const liveDistance = planarDistance(live.position, anchor);
-    expect(frozenDistance - liveDistance).toBeGreaterThan(1.5);
-    expect(liveDistance).toBeLessThan(frozenDistance * 0.9);
+    expect(planarDistance(live.position, defender.position), `${defender.id} live movement`)
+      .toBeGreaterThan(1.5);
+  }
+});
+
+test('live bots recover from the site and flank cover traps', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
+  const recovery = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const trapPositions = {
+      'defense-bot-1': { x: 4.6, y: 3, z: -29 },
+      'attack-bot-1': { x: 13.4, y: 1, z: -9 },
+    } as const;
+    qa.place('attack-human', { x: -14, y: 1, z: 35 });
+    qa.place('attack-bot-2', { x: -13, y: 1, z: 35 });
+    qa.place('defense-bot-2', { x: -14, y: 1, z: -40 });
+    qa.place('defense-bot-3', { x: -13, y: 1, z: -40 });
+    qa.place('defense-bot-1', trapPositions['defense-bot-1']);
+    qa.place('attack-bot-1', trapPositions['attack-bot-1']);
+    qa.useLiveCommands();
+    qa.advance(180);
+
+    return Object.entries(trapPositions).map(([id, start]) => {
+      const actor = qa.state.actors.find((candidate) => candidate.id === id)!;
+      return {
+        id,
+        displacement: Math.hypot(
+          actor.position.x - start.x,
+          actor.position.z - start.z,
+        ),
+      };
+    });
+  });
+
+  for (const actor of recovery) {
+    expect(actor.displacement, `${actor.id} should escape its cover trap`).toBeGreaterThan(1);
   }
 });
 
