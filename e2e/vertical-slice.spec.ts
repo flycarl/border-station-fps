@@ -594,21 +594,29 @@ test('surviving attackers recover and plant the human carrier bomb after human d
       ));
     }
 
+    const overheadCameraPose = qa.cameraPose;
+    const overheadViewActorId = qa.viewActorId;
+    const overheadWeaponVisible =
+      window.__THREE_GAME_DIAGNOSTICS__!.viewWeapon?.visible ?? null;
+    const planted = qa.bomb;
+    qa.advance(2101);
+
     return {
       deadHuman,
       dropped,
-      planted: qa.bomb,
+      planted,
       observedBombStates: [...observedBombStates],
       maximumBotDisplacement,
-      viewActorId: qa.viewActorId,
-      cameraPose: (qa as typeof qa & {
-        readonly cameraPose?: {
-          position: { x: number; y: number; z: number };
-          yaw: number;
-          pitch: number;
-        };
-      }).cameraPose,
-      viewWeaponVisible: window.__THREE_GAME_DIAGNOSTICS__!.viewWeapon?.visible ?? null,
+      viewActorId: overheadViewActorId,
+      cameraPose: overheadCameraPose,
+      nextRound: {
+        round: qa.state.round,
+        human: { ...actor('attack-human') },
+        viewActorId: qa.viewActorId,
+        cameraPose: qa.cameraPose,
+        weaponVisible: window.__THREE_GAME_DIAGNOSTICS__!.viewWeapon?.visible ?? null,
+      },
+      viewWeaponVisible: overheadWeaponVisible,
     };
   });
 
@@ -623,6 +631,18 @@ test('surviving attackers recover and plant the human carrier bomb after human d
     yaw: 0,
     pitch: -Math.PI / 2,
   });
+  expect(result.nextRound).toMatchObject({
+    round: 2,
+    human: { alive: true },
+    viewActorId: 'attack-human',
+    cameraPose: {
+      position: { x: -4, z: 39 },
+      yaw: 0,
+      pitch: 0,
+    },
+    weaponVisible: true,
+  });
+  expect(result.nextRound.cameraPose.position.y).toBeCloseTo(1.65, 2);
   expect(result.viewWeaponVisible).toBe(false);
 });
 
