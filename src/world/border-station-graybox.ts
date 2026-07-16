@@ -86,14 +86,14 @@ export function createBorderStationGraybox(): GrayboxDefinition {
       {
         id: 'cover-site',
         center: { x: 2, y: 2.2, z: -29 },
-        size: { x: 4, y: 2.4, z: 2.5 },
+        size: { x: 4, y: 4.4, z: 2.5 },
         yaw: 0,
         kind: 'cover',
       },
       {
         id: 'cover-site-back',
         center: { x: -9, y: 2.4, z: -32 },
-        size: { x: 3, y: 2.8, z: 3 },
+        size: { x: 3, y: 4.8, z: 3 },
         yaw: 0,
         kind: 'cover',
       },

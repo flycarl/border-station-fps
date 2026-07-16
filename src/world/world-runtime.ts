@@ -85,21 +85,42 @@ function colorForSolid(solid: SolidDef): number {
   return 0xb08b59;
 }
 
+function solidRampVertices(solid: SolidDef): Float32Array {
+  const halfX = solid.size.x / 2;
+  const halfZ = solid.size.z / 2;
+  const height = Math.tan(BORDER_STATION_RAMP_PITCH) * solid.size.z;
+  return new Float32Array([
+    -halfX, 0, -halfZ,
+    halfX, 0, -halfZ,
+    -halfX, height, -halfZ,
+    halfX, height, -halfZ,
+    -halfX, 0, halfZ,
+    halfX, 0, halfZ,
+  ]);
+}
+
+export function createSolidRampGeometry(solid: SolidDef): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(solidRampVertices(solid), 3));
+  geometry.setIndex([
+    0, 4, 2,
+    1, 3, 5,
+    0, 1, 5, 0, 5, 4,
+    2, 4, 5, 2, 5, 3,
+    0, 2, 3, 0, 3, 1,
+  ]);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export function createBombSiteMarkerGeometry(
   site: SiteBounds,
-): { fill: THREE.BufferGeometry; outline: THREE.BufferGeometry } {
+): { outline: THREE.BufferGeometry } {
   const minX = site.center.x - site.halfExtents.x;
   const maxX = site.center.x + site.halfExtents.x;
   const minZ = site.center.z - site.halfExtents.z;
   const maxZ = site.center.z + site.halfExtents.z;
   const y = BOMB_SITE_MARKER_Y;
-
-  const fill = new THREE.BufferGeometry();
-  fill.setAttribute('position', new THREE.Float32BufferAttribute([
-    minX, y, minZ, maxX, y, minZ, maxX, y, maxZ,
-    minX, y, minZ, maxX, y, maxZ, minX, y, maxZ,
-  ], 3));
-  fill.computeVertexNormals();
 
   const outlineVertices = [
     minX, y, minZ, maxX, y, minZ,
@@ -124,7 +145,7 @@ export function createBombSiteMarkerGeometry(
   const outline = new THREE.BufferGeometry();
   outline.setAttribute('position', new THREE.Float32BufferAttribute(outlineVertices, 3));
 
-  return { fill, outline };
+  return { outline };
 }
 
 export function applyCameraPose(camera: THREE.Object3D, cameraPose: CameraPose): void {
@@ -416,16 +437,23 @@ export class WorldRuntime {
   private buildGraybox(): void {
     const map = createBorderStationGraybox();
     for (const solid of map.solids) {
-      const pitch = solid.kind === 'ramp' ? BORDER_STATION_RAMP_PITCH : 0;
       const rotation = new THREE.Quaternion().setFromEuler(
-        new THREE.Euler(pitch, solid.yaw, 0, 'YXZ'),
+        new THREE.Euler(0, solid.yaw, 0, 'YXZ'),
       );
-      const colliderDesc = RAPIER.ColliderDesc.cuboid(
-        solid.size.x / 2,
-        solid.size.y / 2,
-        solid.size.z / 2,
-      )
-        .setTranslation(solid.center.x, solid.center.y, solid.center.z)
+      const colliderDesc = solid.kind === 'ramp'
+        ? RAPIER.ColliderDesc.convexHull(solidRampVertices(solid))
+        : RAPIER.ColliderDesc.cuboid(
+          solid.size.x / 2,
+          solid.size.y / 2,
+          solid.size.z / 2,
+        );
+      if (!colliderDesc) throw new Error(`Cannot build collider for ${solid.id}`);
+      colliderDesc
+        .setTranslation(
+          solid.center.x,
+          solid.kind === 'ramp' ? 0 : solid.center.y,
+          solid.center.z,
+        )
         .setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w });
       const collider = this.physicsWorld.createCollider(colliderDesc);
       this.colliderEntityIds.set(collider.handle, solid.id);
@@ -434,11 +462,17 @@ export class WorldRuntime {
       }
 
       if (this.scene) {
-        const geometry = new THREE.BoxGeometry(solid.size.x, solid.size.y, solid.size.z);
+        const geometry = solid.kind === 'ramp'
+          ? createSolidRampGeometry(solid)
+          : new THREE.BoxGeometry(solid.size.x, solid.size.y, solid.size.z);
         const material = new THREE.MeshStandardMaterial({ color: colorForSolid(solid) });
         const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(solid.center.x, solid.center.y, solid.center.z);
-        mesh.rotation.set(pitch, solid.yaw, 0, 'YXZ');
+        mesh.position.set(
+          solid.center.x,
+          solid.kind === 'ramp' ? 0 : solid.center.y,
+          solid.center.z,
+        );
+        mesh.rotation.set(0, solid.yaw, 0, 'YXZ');
         mesh.receiveShadow = true;
         this.scene.add(mesh);
         this.disposableGeometries.push(geometry);
@@ -451,13 +485,6 @@ export class WorldRuntime {
   private addBombSiteMarker(site: SiteBounds): void {
     if (!this.scene) return;
     const geometry = createBombSiteMarkerGeometry(site);
-    const fillMaterial = new THREE.MeshBasicMaterial({
-      color: 0xd20f22,
-      transparent: true,
-      opacity: 0.22,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
     const outlineMaterial = new THREE.LineBasicMaterial({
       color: 0xff3347,
       transparent: true,
@@ -465,19 +492,18 @@ export class WorldRuntime {
     });
     const marker = new THREE.Group();
     marker.name = 'bomb-site-marker';
-    marker.add(new THREE.Mesh(geometry.fill, fillMaterial));
     marker.add(new THREE.LineSegments(geometry.outline, outlineMaterial));
     this.scene.add(marker);
     this.bombSiteMarker = marker;
-    this.disposableGeometries.push(geometry.fill, geometry.outline);
-    this.disposableMaterials.push(fillMaterial, outlineMaterial);
+    this.disposableGeometries.push(geometry.outline);
+    this.disposableMaterials.push(outlineMaterial);
 
     if (new URLSearchParams(window.location.search).get('qa') === '1') {
       window.__THREE_BOMB_SITE_MARKER__ = {
         visible: marker.visible,
         center: { x: site.center.x, z: site.center.z },
         size: { x: site.halfExtents.x * 2, z: site.halfExtents.z * 2 },
-        fillOpacity: fillMaterial.opacity,
+        fillOpacity: 0,
         outlineColor: outlineMaterial.color.getHex(),
       };
     }

@@ -62,6 +62,17 @@ it('raises the main ramp along the attack-to-site direction', () => {
   expect(attackEdgeHeight).toBeCloseTo(floorHeight, 2);
 });
 
+it('grounds every wall and cover while preserving their authored tops', () => {
+  const solids = createBorderStationGraybox().solids
+    .filter(({ kind }) => kind === 'wall' || kind === 'cover');
+
+  for (const solid of solids) {
+    expect(solid.center.y - solid.size.y / 2, `${solid.id} bottom`).toBeCloseTo(0);
+  }
+  expect(solids.find(({ id }) => id === 'cover-site')?.center.y).toBeCloseTo(2.2);
+  expect(solids.find(({ id }) => id === 'cover-site')?.size.y).toBeCloseTo(4.4);
+});
+
 it('faces attack spawns toward the site and defense spawns toward attackers', () => {
   const map = createBorderStationGraybox();
 

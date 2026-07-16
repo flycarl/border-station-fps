@@ -22,6 +22,7 @@ import { WeaponSystem } from './weapons/weapon-system';
 import { createBorderStationGraybox } from './world/border-station-graybox';
 import {
   WorldRuntime,
+  type CameraPose,
   type PlayerWorldStatus,
   type WorldDiagnostics,
 } from './world/world-runtime';
@@ -104,27 +105,28 @@ export function selectViewActor(
   humanId: EntityId,
 ): EntityId | null {
   const human = actors.find(({ id }) => id === humanId);
-  if (human?.alive) return human.id;
+  return human?.alive ? human.id : null;
+}
 
-  const origin = human?.position;
-  const nearest = (team: Team): ActorSnapshot | undefined => actors
-    .filter((actor) => actor.team === team && actor.alive)
-    .sort((left, right) => {
-      if (!origin) return left.id.localeCompare(right.id);
-      const leftDistance = Math.hypot(
-        left.position.x - origin.x,
-        left.position.y - origin.y,
-        left.position.z - origin.z,
-      );
-      const rightDistance = Math.hypot(
-        right.position.x - origin.x,
-        right.position.y - origin.y,
-        right.position.z - origin.z,
-      );
-      return leftDistance - rightDistance || left.id.localeCompare(right.id);
-    })[0];
-
-  return nearest('attack')?.id ?? nearest('defense')?.id ?? null;
+export function selectCameraPose(
+  human: Pick<PlayerState, 'position' | 'yaw' | 'pitch' | 'alive'>,
+): CameraPose {
+  if (!human.alive) {
+    return {
+      position: { x: 0, y: 72, z: 0 },
+      yaw: 0,
+      pitch: -Math.PI / 2,
+    };
+  }
+  return {
+    position: {
+      x: human.position.x,
+      y: human.position.y + EYE_HEIGHT,
+      z: human.position.z,
+    },
+    yaw: human.yaw,
+    pitch: human.pitch,
+  };
 }
 
 export interface GameSnapshot extends HudSnapshot {
@@ -165,6 +167,7 @@ interface GameQaDriver {
   readonly state: GameSnapshot;
   readonly bomb: ReturnType<BombSystem['snapshot']>;
   readonly viewActorId: EntityId | null;
+  readonly cameraPose: CameraPose;
   advance(ticks: number): void;
   command(actorId: EntityId, command: Partial<PlayerCommand>): void;
   clearCommands(): void;
@@ -554,14 +557,7 @@ export class Game {
     this.currentSnapshot = { ...this.currentSnapshot, paused: this.paused };
     this.hud.render(this.currentSnapshot);
     this.updateFirstPersonWeapon(0);
-    const viewActorId = selectViewActor(this.currentSnapshot.actors, human.id);
-    const viewActor = viewActorId ? this.actors.get(viewActorId)?.state : undefined;
-    if (!viewActor) return;
-    this.world.render({
-      position: this.eyePosition(viewActor.position),
-      yaw: viewActor.yaw,
-      pitch: viewActor.pitch,
-    });
+    this.world.render(selectCameraPose(human));
   }
 
   private eyePosition(position: Vec3): Vec3 {
@@ -654,6 +650,11 @@ export class Game {
       },
       get viewActorId() {
         return selectViewActor(game.currentSnapshot.actors, 'attack-human');
+      },
+      get cameraPose() {
+        const human = game.actors.get('attack-human')?.state;
+        if (!human) throw new Error('Missing human actor');
+        return selectCameraPose(human);
       },
       advance(ticks) {
         const count = Math.max(0, Math.min(20_000, Math.floor(ticks)));

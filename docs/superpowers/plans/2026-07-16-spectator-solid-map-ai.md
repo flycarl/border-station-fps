@@ -30,10 +30,10 @@
 - Produces: `selectCameraPose(actors, humanId): CameraPose`
 - Produces: `GameQaDriver.cameraPose`
 
-- [ ] **Step 1: Write failing tests** asserting an alive human returns eye-level first-person pose and a dead human returns `{ position: { x: 0, y: 72, z: 0 }, yaw: 0, pitch: -Math.PI / 2 }` with `viewActorId === null`.
-- [ ] **Step 2: Run** `npm test -- --run tests/game.test.ts` and the focused death-camera Playwright test; expect the existing teammate-follow behavior to fail.
-- [ ] **Step 3: Implement** a pure selector and render with its pose; expose the last pose through QA diagnostics.
-- [ ] **Step 4: Re-run focused tests** and expect pass.
+- [x] **Step 1: Write failing tests** asserting an alive human returns eye-level first-person pose and a dead human returns `{ position: { x: 0, y: 72, z: 0 }, yaw: 0, pitch: -Math.PI / 2 }` with `viewActorId === null`.
+- [x] **Step 2: Run** `npm test -- --run tests/game.test.ts` and the focused death-camera Playwright test; expect the existing teammate-follow behavior to fail.
+- [x] **Step 3: Implement** a pure selector and render with its pose; expose the last pose through QA diagnostics.
+- [x] **Step 4: Re-run focused tests** and expect pass.
 
 ### Task 2: Closed ramps and grounded solids
 
@@ -46,10 +46,10 @@
 - Produces: `createSolidRampGeometry(solid): THREE.BufferGeometry`
 - Produces: `groundSolid(solid): SolidDef`
 
-- [ ] **Step 1: Write failing tests** for a six-vertex triangular-prism footprint, closed indexed faces, a low edge at ground, a high edge matching `tan(BORDER_STATION_RAMP_PITCH) * size.z`, and every wall/cover bottom at zero.
-- [ ] **Step 2: Run** `npm test -- --run tests/world` and confirm the box-ramp and floating-cover implementation fails.
-- [ ] **Step 3: Implement** shared wedge vertices for Three.js geometry and `RAPIER.ColliderDesc.convexHull`, and extend box solids downward while preserving their authored top.
-- [ ] **Step 4: Re-run world tests** including traversal/support tests and expect pass.
+- [x] **Step 1: Write failing tests** for a six-vertex triangular-prism footprint, closed indexed faces, a low edge at ground, a high edge matching `tan(BORDER_STATION_RAMP_PITCH) * size.z`, and every wall/cover bottom at zero.
+- [x] **Step 2: Run** `npm test -- --run tests/world` and confirm the box-ramp and floating-cover implementation fails.
+- [x] **Step 3: Implement** shared wedge vertices for Three.js geometry and `RAPIER.ColliderDesc.convexHull`, and extend box solids downward while preserving their authored top.
+- [x] **Step 4: Re-run world tests** including traversal/support tests and expect pass.
 
 ### Task 3: Outline-only bomb site and bot aim error
 
@@ -64,11 +64,11 @@
 - Changes: `createBombSiteMarkerGeometry(site): { outline }`
 - Changes: aim bounds to yaw `0.060`, pitch `0.040`, interval `0.35`
 
-- [ ] **Step 1: Write failing marker tests** requiring only outline geometry and diagnostic `fillOpacity: 0`.
-- [ ] **Step 2: Write failing aim tests** requiring deterministic samples within the new bounds and at least one sample beyond the old bounds.
-- [ ] **Step 3: Run focused tests** and confirm failures match the old filled marker and old aim limits.
-- [ ] **Step 4: Remove the fill mesh/material**, retain the red perimeter/corner strokes, and update aim constants.
-- [ ] **Step 5: Re-run focused tests** and expect pass.
+- [x] **Step 1: Write failing marker tests** requiring only outline geometry and diagnostic `fillOpacity: 0`.
+- [x] **Step 2: Write failing aim tests** requiring deterministic samples within the new bounds and at least one sample beyond the old bounds.
+- [x] **Step 3: Run focused tests** and confirm failures match the old filled marker and old aim limits.
+- [x] **Step 4: Remove the fill mesh/material**, retain the red perimeter/corner strokes, and update aim constants.
+- [x] **Step 5: Re-run focused tests** and expect pass.
 
 ### Task 4: Verification and publication
 
@@ -79,7 +79,7 @@
 - Consumes: QA driver, production build, GitHub Pages base path
 - Produces: reviewed `master` and updated `gh-pages`
 
-- [ ] **Step 1: Run** `git diff --check && npm test -- --run && npm run build && npx playwright test` and require zero failures.
-- [ ] **Step 2: Inspect desktop screenshots, canvas pixels, camera pose, renderer diagnostics, and console/page/network errors.**
+- [x] **Step 1: Run** `git diff --check && npm test -- --run && npm run build && npx playwright test` and require zero failures.
+- [x] **Step 2: Inspect desktop screenshots, canvas pixels, camera pose, renderer diagnostics, and console/page/network errors.**
 - [ ] **Step 3: Request independent code review** and resolve every Critical or Important issue.
 - [ ] **Step 4: Merge to `master`, re-run unit tests, push source, build with `--base=/border-station-fps/`, deploy `gh-pages`, and verify HTTP 200 with the new asset hash.

@@ -3,6 +3,7 @@ import {
   calculateTracerOrigin,
   cloneGameSnapshot,
   createGameRoster,
+  selectCameraPose,
   selectRoundBombCarrier,
   selectViewActor,
   STEP_ORDER,
@@ -66,7 +67,7 @@ it('keeps the view on the human attacker while the human is alive', () => {
   expect(selectViewActor(actors, 'attack-human')).toBe('attack-human');
 });
 
-it('follows the nearest living attacker after the human dies', () => {
+it('selects no actor view after the human dies', () => {
   const actors = [
     actor('attack-human', 'attack', { x: 0, y: 1, z: 10 }, false),
     actor('attack-bot-1', 'attack', { x: 8, y: 1, z: 10 }),
@@ -74,28 +75,33 @@ it('follows the nearest living attacker after the human dies', () => {
     actor('defense-bot-1', 'defense', { x: 1, y: 1, z: 10 }),
   ];
 
-  expect(selectViewActor(actors, 'attack-human')).toBe('attack-bot-2');
+  expect(selectViewActor(actors, 'attack-human')).toBeNull();
 });
 
-it('breaks equal-distance spectator ties by actor id', () => {
-  const actors = [
-    actor('attack-human', 'attack', { x: 0, y: 1, z: 10 }, false),
-    actor('attack-bot-2', 'attack', { x: 2, y: 1, z: 10 }),
-    actor('attack-bot-1', 'attack', { x: -2, y: 1, z: 10 }),
-  ];
+it('switches from the human eye pose to a whole-map overhead pose on death', () => {
+  const living = selectCameraPose({
+    position: { x: 4, y: 1, z: 39 },
+    yaw: 0.4,
+    pitch: -0.2,
+    alive: true,
+  });
+  const dead = selectCameraPose({
+    position: { x: 4, y: 1, z: 39 },
+    yaw: 0.4,
+    pitch: -0.2,
+    alive: false,
+  });
 
-  expect(selectViewActor(actors, 'attack-human')).toBe('attack-bot-1');
-});
-
-it('follows a living defender when no attackers survive', () => {
-  const actors = [
-    actor('attack-human', 'attack', { x: 0, y: 1, z: 10 }, false),
-    actor('attack-bot-1', 'attack', { x: 1, y: 1, z: 10 }, false),
-    actor('defense-bot-1', 'defense', { x: 9, y: 1, z: 10 }),
-    actor('defense-bot-2', 'defense', { x: 3, y: 1, z: 10 }),
-  ];
-
-  expect(selectViewActor(actors, 'attack-human')).toBe('defense-bot-2');
+  expect(living).toEqual({
+    position: { x: 4, y: 1.65, z: 39 },
+    yaw: 0.4,
+    pitch: -0.2,
+  });
+  expect(dead).toEqual({
+    position: { x: 0, y: 72, z: 0 },
+    yaw: 0,
+    pitch: -Math.PI / 2,
+  });
 });
 
 it('starts visual tracers in front of and beside the camera at the muzzle', () => {

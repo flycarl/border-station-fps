@@ -2,17 +2,33 @@ import { expect, it } from 'vitest';
 import { createBorderStationGraybox } from '../../src/world/border-station-graybox';
 import {
   createBombSiteMarkerGeometry,
+  createSolidRampGeometry,
   WorldRuntime,
 } from '../../src/world/world-runtime';
 
 const mainRamp = createBorderStationGraybox().solids.find((solid) => solid.id === 'ramp-main')!;
 
-it('builds the red marker geometry from the authoritative bomb-site extents', () => {
+it('builds each ramp as a closed ground-to-slope triangular prism', () => {
+  const geometry = createSolidRampGeometry(mainRamp);
+  try {
+    const positions = geometry.getAttribute('position');
+    expect(positions.count).toBe(6);
+    expect(geometry.index?.count).toBe(24);
+    geometry.computeBoundingBox();
+    expect(geometry.boundingBox?.min.y).toBe(0);
+    expect(geometry.boundingBox?.max.y).toBeCloseTo(
+      Math.tan(0.18) * mainRamp.size.z,
+    );
+  } finally {
+    geometry.dispose();
+  }
+});
+
+it('builds only red outline geometry from the authoritative bomb-site extents', () => {
   const site = createBorderStationGraybox().bombSite;
   const marker = createBombSiteMarkerGeometry(site);
 
   try {
-    marker.fill.computeBoundingBox();
     marker.outline.computeBoundingBox();
 
     const expectedBounds = {
@@ -25,12 +41,10 @@ it('builds the red marker geometry from the authoritative bomb-site extents', ()
         z: site.center.z + site.halfExtents.z,
       },
     };
-    expect(marker.fill.boundingBox).toMatchObject(expectedBounds);
     expect(marker.outline.boundingBox).toMatchObject(expectedBounds);
-    expect(marker.fill.getAttribute('position').count).toBe(6);
+    expect(marker).not.toHaveProperty('fill');
     expect(marker.outline.getAttribute('position').count).toBeGreaterThan(8);
   } finally {
-    marker.fill.dispose();
     marker.outline.dispose();
   }
 });

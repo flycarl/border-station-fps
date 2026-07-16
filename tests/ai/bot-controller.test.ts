@@ -88,7 +88,7 @@ it('keeps pressure with deterministic advance and strafe movement while engaging
   expect(firstCommand).toEqual(secondCommand);
 });
 
-it('keeps seeded bounded aim error stable until the 0.35-second resample boundary', () => {
+it('keeps wider seeded aim error stable until the 0.35-second resample boundary', () => {
   const first = new BotController('bot-sustained', 'defense', 17);
   const replay = new BotController('bot-sustained', 'defense', 17);
   const context = {
@@ -109,11 +109,11 @@ it('keeps seeded bounded aim error stable until the 0.35-second resample boundar
   expect(firstSequence[2]!.yaw).not.toBe(firstSequence[1]!.yaw);
   expect(firstSequence[2]!.pitch).not.toBe(firstSequence[1]!.pitch);
   for (const command of firstSequence) {
-    expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.035);
-    expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.020);
+    expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.060);
+    expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.040);
   }
-  expect(firstSequence.some((command) => Math.abs(command.yaw) > 0.014
-    || Math.abs(command.pitch) > 0.009)).toBe(true);
+  expect(firstSequence.some((command) => Math.abs(command.yaw) > 0.035
+    || Math.abs(command.pitch) > 0.020)).toBe(true);
   expect(replaySequence).toEqual(firstSequence);
 });
 

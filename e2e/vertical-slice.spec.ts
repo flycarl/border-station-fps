@@ -487,7 +487,7 @@ test('composed plant and defuse immediately begin the next round preparation', a
   expect(result.restarted).toMatchObject({ phase: 'freeze', round: 1, attackScore: 0, defenseScore: 0 });
 });
 
-test('authoritative bomb site has a visible red floor marker during active play', async ({ page }, testInfo) => {
+test('authoritative bomb site has a visible red outline during active play', async ({ page }, testInfo) => {
   const audit = installBrowserAudit(page);
   await page.goto('/?qa=1&debug=1');
   await page.waitForFunction(() => Boolean(
@@ -515,7 +515,7 @@ test('authoritative bomb site has a visible red floor marker during active play'
     visible: true,
     center: { x: -1, z: -29 },
     size: { x: 18, z: 12 },
-    fillOpacity: 0.22,
+    fillOpacity: 0,
     outlineColor: 0xff3347,
   });
   expect(objective.state.phase).toBe('planted');
@@ -601,6 +601,13 @@ test('surviving attackers recover and plant the human carrier bomb after human d
       observedBombStates: [...observedBombStates],
       maximumBotDisplacement,
       viewActorId: qa.viewActorId,
+      cameraPose: (qa as typeof qa & {
+        readonly cameraPose?: {
+          position: { x: number; y: number; z: number };
+          yaw: number;
+          pitch: number;
+        };
+      }).cameraPose,
       viewWeaponVisible: window.__THREE_GAME_DIAGNOSTICS__!.viewWeapon?.visible ?? null,
     };
   });
@@ -610,7 +617,12 @@ test('surviving attackers recover and plant the human carrier bomb after human d
   expect(result.maximumBotDisplacement).toBeGreaterThan(1);
   expect(result.observedBombStates).toContain('carried');
   expect(result.planted.state).toBe('planted');
-  expect(result.viewActorId).toBe('attack-bot-1');
+  expect(result.viewActorId).toBeNull();
+  expect(result.cameraPose).toEqual({
+    position: { x: 0, y: 72, z: 0 },
+    yaw: 0,
+    pitch: -Math.PI / 2,
+  });
   expect(result.viewWeaponVisible).toBe(false);
 });
 
