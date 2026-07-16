@@ -207,6 +207,24 @@ it('steers a displaced retriever back to the authored corridor before advancing'
   expect(commands.get('attack-1')?.yaw).toBeCloseTo(Math.PI / 2);
 });
 
+it('re-enters the corridor before pursuing a same-node interaction target', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-1')!.position = { x: 0, y: 0, z: 4 };
+  views.find(({ id }) => id === 'attack-2')!.position = { x: 8, y: 0, z: 10 };
+  const commands = new BotSquad(ids).sample({
+    round: 3,
+    phase: 'live',
+    actors: views,
+    bomb: bomb({ state: 'dropped', carrierId: null, position: { x: 1, y: 0, z: 4 } }),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  expect(commands.get('attack-1')).toMatchObject({ moveZ: -1, interact: false });
+  expect(commands.get('attack-1')?.yaw).toBeCloseTo(0);
+});
+
 it.each([
   ['normal attacker', null],
   ['bomb carrier', 'attack-1'],

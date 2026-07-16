@@ -80,7 +80,11 @@ const routeToward = (
 ): Vec3 => {
   const start = nav.nearest(from);
   const goal = nav.nearest(target);
-  if (start.id === goal.id) return target;
+  if (start.id === goal.id) {
+    return planarDistance(from, start.position) > 2.0
+      ? start.position
+      : target;
+  }
   const path = nav.findPath(start.id, goal.id);
   const nextId = path[1] ?? path[0] ?? goal.id;
   const next = nav.nodes.find(({ id }) => id === nextId);
