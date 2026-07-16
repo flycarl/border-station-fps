@@ -69,8 +69,10 @@ it('grounds every wall and cover while preserving their authored tops', () => {
   for (const solid of solids) {
     expect(solid.center.y - solid.size.y / 2, `${solid.id} bottom`).toBeCloseTo(0);
   }
-  expect(solids.find(({ id }) => id === 'cover-site')?.center.y).toBeCloseTo(2.2);
-  expect(solids.find(({ id }) => id === 'cover-site')?.size.y).toBeCloseTo(4.4);
+  const siteCover = solids.find(({ id }) => id === 'cover-site')!;
+  const backCover = solids.find(({ id }) => id === 'cover-site-back')!;
+  expect(siteCover.center.y + siteCover.size.y / 2).toBeCloseTo(3.4);
+  expect(backCover.center.y + backCover.size.y / 2).toBeCloseTo(3.8);
 });
 
 it('faces attack spawns toward the site and defense spawns toward attackers', () => {
