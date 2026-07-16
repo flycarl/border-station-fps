@@ -6,6 +6,7 @@ import {
   selectCameraPose,
   selectRoundBombCarrier,
   selectViewActor,
+  shouldAdvanceSimulation,
   STEP_ORDER,
   type GameSnapshot,
 } from '../src/game';
@@ -102,6 +103,17 @@ it('switches from the human eye pose to a whole-map overhead pose on death', () 
     yaw: 0,
     pitch: -Math.PI / 2,
   });
+});
+
+it('keeps the bot simulation running when a dead player loses pointer lock', () => {
+  expect(shouldAdvanceSimulation({ paused: true, hasEntered: true, humanAlive: false }))
+    .toBe(true);
+  expect(shouldAdvanceSimulation({ paused: true, hasEntered: true, humanAlive: true }))
+    .toBe(false);
+  expect(shouldAdvanceSimulation({ paused: false, hasEntered: true, humanAlive: true }))
+    .toBe(true);
+  expect(shouldAdvanceSimulation({ paused: true, hasEntered: false, humanAlive: false }))
+    .toBe(false);
 });
 
 it('starts visual tracers in front of and beside the camera at the muzzle', () => {

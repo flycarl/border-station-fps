@@ -129,6 +129,18 @@ export function selectCameraPose(
   };
 }
 
+export function shouldAdvanceSimulation({
+  paused,
+  hasEntered,
+  humanAlive,
+}: {
+  paused: boolean;
+  hasEntered: boolean;
+  humanAlive: boolean;
+}): boolean {
+  return !paused || (hasEntered && !humanAlive);
+}
+
 export interface GameSnapshot extends HudSnapshot {
   round: number;
   paused: boolean;
@@ -302,7 +314,14 @@ export class Game {
     if (this.disposed) return;
     const frameSeconds = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) / 1000;
     this.lastFrameTime = time;
-    if (!this.paused) this.clock.advance(frameSeconds, this.fixedUpdate);
+    const humanAlive = this.actors.get('attack-human')?.state.alive ?? false;
+    if (shouldAdvanceSimulation({
+      paused: this.paused,
+      hasEntered: this.hasEntered,
+      humanAlive,
+    })) {
+      this.clock.advance(frameSeconds, this.fixedUpdate);
+    }
     this.renderFrame();
     this.rafId = requestAnimationFrame(this.frame);
   };
@@ -590,7 +609,15 @@ export class Game {
       this.startScreen.setLockError('');
       this.startScreen.setPaused(false);
     } else if (this.hasEntered) {
-      this.pause();
+      const humanAlive = this.actors.get('attack-human')?.state.alive ?? false;
+      if (humanAlive) {
+        this.pause();
+      } else {
+        this.paused = false;
+        this.lastFrameTime = null;
+        this.input.resetHeldState();
+        this.startScreen.setPaused(false);
+      }
     }
   };
 

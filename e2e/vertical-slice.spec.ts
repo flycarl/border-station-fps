@@ -646,6 +646,98 @@ test('surviving attackers recover and plant the human carrier bomb after human d
   expect(result.viewWeaponVisible).toBe(false);
 });
 
+test('bots keep moving and fighting when pointer lock is released after human death', async ({ page }, testInfo) => {
+  const audit = installBrowserAudit(page);
+  await page.addInitScript(() => {
+    let locked: Element | null = null;
+    Object.defineProperty(document, 'pointerLockElement', {
+      configurable: true,
+      get: () => locked,
+    });
+    Object.defineProperty(HTMLCanvasElement.prototype, 'requestPointerLock', {
+      configurable: true,
+      value: function requestPointerLock() {
+        locked = this;
+        document.dispatchEvent(new Event('pointerlockchange'));
+        return Promise.resolve();
+      },
+    });
+    Object.defineProperty(document, 'exitPointerLock', {
+      configurable: true,
+      value: function exitPointerLock() {
+        locked = null;
+        document.dispatchEvent(new Event('pointerlockchange'));
+      },
+    });
+  });
+  await page.goto('/?qa=1&debug=1');
+  await page.getByRole('button', { name: '开始任务' }).click();
+  await advanceToLive(page);
+
+  const start = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const actor = (id: string) => qa.state.actors.find((candidate) => candidate.id === id)!;
+    qa.place('attack-human', { x: -1, y: 3, z: -29 });
+    qa.place('defense-bot-1', { x: -1, y: 3, z: -24 });
+    for (let shot = 0; shot < 5 && actor('attack-human').alive; shot++) {
+      qa.command('defense-bot-1', { fire: true, slot: 1, yaw: 0, pitch: 0 });
+      qa.advance(1);
+      qa.command('defense-bot-1', { fire: false, slot: 1, yaw: 0, pitch: 0 });
+      qa.advance(7);
+    }
+    qa.place('attack-bot-1', { x: 0, y: 1, z: 5 });
+    qa.place('defense-bot-1', { x: 0, y: 1, z: 0 });
+    qa.place('attack-bot-2', { x: -8, y: 1, z: 20 });
+    qa.useLiveCommands();
+    document.exitPointerLock();
+    return {
+      humanAlive: actor('attack-human').alive,
+      attackBotPosition: { ...actor('attack-bot-2').position },
+      combatHealth: actor('attack-bot-1').health + actor('defense-bot-1').health,
+    };
+  });
+  expect(start.humanAlive).toBe(false);
+
+  await expect.poll(async () => page.evaluate((initial) => {
+    const state = window.__THREE_GAME_DIAGNOSTICS__!.state;
+    const mover = state.actors.find(({ id }) => id === 'attack-bot-2')!;
+    const attackBot = state.actors.find(({ id }) => id === 'attack-bot-1')!;
+    const defenseBot = state.actors.find(({ id }) => id === 'defense-bot-1')!;
+    return {
+      paused: state.paused,
+      moved: Math.hypot(
+        mover.position.x - initial.attackBotPosition.x,
+        mover.position.z - initial.attackBotPosition.z,
+      ) > 1,
+      damageDealt: attackBot.health + defenseBot.health < initial.combatHealth,
+    };
+  }, start), { timeout: 5_000 }).toMatchObject({
+    paused: false,
+    moved: true,
+    damageDealt: true,
+  });
+
+  const result = await page.evaluate((initial) => {
+    const state = window.__THREE_GAME_DIAGNOSTICS__!.state;
+    const mover = state.actors.find(({ id }) => id === 'attack-bot-2')!;
+    const attackBot = state.actors.find(({ id }) => id === 'attack-bot-1')!;
+    const defenseBot = state.actors.find(({ id }) => id === 'defense-bot-1')!;
+    return {
+      movement: Math.hypot(
+        mover.position.x - initial.attackBotPosition.x,
+        mover.position.z - initial.attackBotPosition.z,
+      ),
+      combatHealth: attackBot.health + defenseBot.health,
+    };
+  }, start);
+  expect(result.movement).toBeGreaterThan(1);
+  expect(result.combatHealth).toBeLessThan(start.combatHealth);
+  await page.screenshot({ path: testInfo.outputPath('death-spectator-live-combat-1440x900.png') });
+  expect(audit.consoleErrors).toEqual([]);
+  expect(audit.pageErrors).toEqual([]);
+  expect(audit.failedRequests).toEqual([]);
+});
+
 test('composed WeaponSystem elimination awards attack and begins the next preparation', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
