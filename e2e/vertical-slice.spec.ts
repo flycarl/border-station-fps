@@ -716,6 +716,12 @@ test('bots keep moving and fighting when pointer lock is released after human de
     moved: true,
     damageDealt: true,
   });
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => (
+    window.__THREE_GAME_DIAGNOSTICS__!.state.paused
+  ))).toBe(false);
 
   const result = await page.evaluate((initial) => {
     const state = window.__THREE_GAME_DIAGNOSTICS__!.state;
@@ -732,6 +738,15 @@ test('bots keep moving and fighting when pointer lock is released after human de
   }, start);
   expect(result.movement).toBeGreaterThan(1);
   expect(result.combatHealth).toBeLessThan(start.combatHealth);
+
+  const nextRound = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.advanceUntilRoundChanges(10_000);
+    return qa.state;
+  });
+  expect(nextRound).toMatchObject({ round: 2, phase: 'freeze', paused: true });
+  expect(nextRound.phaseRemaining).toBeGreaterThan(2.9);
+  await expect(page.getByRole('dialog')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('death-spectator-live-combat-1440x900.png') });
   expect(audit.consoleErrors).toEqual([]);
   expect(audit.pageErrors).toEqual([]);

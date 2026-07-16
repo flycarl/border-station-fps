@@ -136,9 +136,9 @@ export function shouldAdvanceSimulation({
 }: {
   paused: boolean;
   hasEntered: boolean;
-  humanAlive: boolean;
+  humanAlive: boolean | undefined;
 }): boolean {
-  return !paused || (hasEntered && !humanAlive);
+  return !paused || (hasEntered && humanAlive === false);
 }
 
 export interface GameSnapshot extends HudSnapshot {
@@ -181,6 +181,7 @@ interface GameQaDriver {
   readonly viewActorId: EntityId | null;
   readonly cameraPose: CameraPose;
   advance(ticks: number): void;
+  advanceUntilRoundChanges(maxTicks: number): void;
   command(actorId: EntityId, command: Partial<PlayerCommand>): void;
   clearCommands(): void;
   place(actorId: EntityId, position: Vec3): void;
@@ -314,13 +315,20 @@ export class Game {
     if (this.disposed) return;
     const frameSeconds = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) / 1000;
     this.lastFrameTime = time;
-    const humanAlive = this.actors.get('attack-human')?.state.alive ?? false;
+    const humanAlive = this.actors.get('attack-human')?.state.alive;
     if (shouldAdvanceSimulation({
       paused: this.paused,
       hasEntered: this.hasEntered,
       humanAlive,
     })) {
-      this.clock.advance(frameSeconds, this.fixedUpdate);
+      this.clock.advance(frameSeconds, (dt) => {
+        this.fixedUpdate(dt);
+        return shouldAdvanceSimulation({
+          paused: this.paused,
+          hasEntered: this.hasEntered,
+          humanAlive: this.actors.get('attack-human')?.state.alive,
+        });
+      });
     }
     this.renderFrame();
     this.rafId = requestAnimationFrame(this.frame);
@@ -507,6 +515,7 @@ export class Game {
     this.humanWeaponFired = false;
     this.botSquad.reset(this.match.snapshot().round);
     this.spawnActors();
+    if (this.hasEntered && document.pointerLockElement !== this.canvas) this.pause();
   }
 
   private createWeaponSystem(): WeaponSystem {
@@ -609,22 +618,30 @@ export class Game {
       this.startScreen.setLockError('');
       this.startScreen.setPaused(false);
     } else if (this.hasEntered) {
-      const humanAlive = this.actors.get('attack-human')?.state.alive ?? false;
-      if (humanAlive) {
+      const humanAlive = this.actors.get('attack-human')?.state.alive;
+      if (humanAlive !== false) {
         this.pause();
       } else {
-        this.paused = false;
-        this.lastFrameTime = null;
-        this.input.resetHeldState();
-        this.startScreen.setPaused(false);
+        this.continueSpectating();
       }
     }
   };
 
   private readonly keyDown = (event: KeyboardEvent): void => {
     if (event.code !== 'Escape' || !this.hasEntered) return;
+    if (this.actors.get('attack-human')?.state.alive === false) {
+      this.continueSpectating();
+      return;
+    }
     this.pause();
   };
+
+  private continueSpectating(): void {
+    this.paused = false;
+    this.lastFrameTime = null;
+    this.input.resetHeldState();
+    this.startScreen.setPaused(false);
+  }
 
   private pause(message = ''): void {
     this.paused = true;
@@ -686,6 +703,15 @@ export class Game {
       advance(ticks) {
         const count = Math.max(0, Math.min(20_000, Math.floor(ticks)));
         for (let tick = 0; tick < count; tick++) game.fixedUpdate(FIXED_STEP);
+        game.renderFrame();
+      },
+      advanceUntilRoundChanges(maxTicks) {
+        const count = Math.max(0, Math.min(20_000, Math.floor(maxTicks)));
+        const startingRound = game.match.snapshot().round;
+        for (let tick = 0; tick < count; tick++) {
+          game.fixedUpdate(FIXED_STEP);
+          if (game.match.snapshot().round !== startingRound) break;
+        }
         game.renderFrame();
       },
       command(actorId, command) {

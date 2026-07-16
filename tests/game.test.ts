@@ -114,6 +114,8 @@ it('keeps the bot simulation running when a dead player loses pointer lock', () 
     .toBe(true);
   expect(shouldAdvanceSimulation({ paused: true, hasEntered: false, humanAlive: false }))
     .toBe(false);
+  expect(shouldAdvanceSimulation({ paused: true, hasEntered: true, humanAlive: undefined }))
+    .toBe(false);
 });
 
 it('starts visual tracers in front of and beside the camera at the muzzle', () => {

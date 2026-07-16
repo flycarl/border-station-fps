@@ -7,11 +7,15 @@ export class FixedStepClock {
     private readonly maxFrame: number,
   ) {}
 
-  advance(frameSeconds: number, update: (dt: number) => void): void {
+  advance(frameSeconds: number, update: (dt: number) => boolean | void): void {
     this.accumulator += Math.min(frameSeconds, this.maxFrame);
     while (this.accumulator + Number.EPSILON >= this.step) {
-      update(this.step);
+      const keepAdvancing = update(this.step);
       this.accumulator -= this.step;
+      if (keepAdvancing === false) {
+        this.accumulator = 0;
+        break;
+      }
     }
     this.alpha = this.accumulator / this.step;
   }
