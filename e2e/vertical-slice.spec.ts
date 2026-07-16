@@ -191,6 +191,61 @@ test('defenders hold during freeze then move in the live opening', async ({ page
   }
 });
 
+test('bots keep safe spacing in deterministic opening lanes', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  const opening = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const bots = () => qa.state.actors
+      .filter(({ id }) => id.includes('bot'))
+      .map(({ id, team, position }) => ({ id, team, position: { ...position } }));
+    const planarDistance = (
+      left: { x: number; z: number },
+      right: { x: number; z: number },
+    ) => Math.hypot(left.x - right.x, left.z - right.z);
+    const minimumTeamSpacing = (actors: ReturnType<typeof bots>) => {
+      let minimum = Number.POSITIVE_INFINITY;
+      for (const team of ['attack', 'defense']) {
+        const teammates = actors.filter((actor) => actor.team === team);
+        for (let left = 0; left < teammates.length; left++) {
+          for (let right = left + 1; right < teammates.length; right++) {
+            minimum = Math.min(minimum, planarDistance(
+              teammates[left]!.position,
+              teammates[right]!.position,
+            ));
+          }
+        }
+      }
+      return minimum;
+    };
+
+    qa.useLiveCommands();
+    qa.advance(181);
+    const start = bots();
+    let minimumSpacing = minimumTeamSpacing(start);
+    for (let sample = 0; sample < 24; sample++) {
+      qa.advance(10);
+      minimumSpacing = Math.min(minimumSpacing, minimumTeamSpacing(bots()));
+    }
+    const finish = bots();
+    return {
+      minimumSpacing,
+      displacements: finish.map((actor) => {
+        const origin = start.find(({ id }) => id === actor.id)!;
+        return {
+          id: actor.id,
+          distance: planarDistance(origin.position, actor.position),
+        };
+      }),
+    };
+  });
+
+  expect(opening.minimumSpacing).toBeGreaterThan(1.2);
+  for (const actor of opening.displacements) {
+    expect(actor.distance, `${actor.id} opening progress`).toBeGreaterThan(1.5);
+  }
+});
+
 test('live bots recover from the site and flank cover traps', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
@@ -517,9 +572,14 @@ test('surviving attackers recover and plant the human carrier bomb after human d
     const deadHuman = { ...actor('attack-human') };
     const dropped = qa.bomb;
 
-    for (const defender of ['defense-bot-1', 'defense-bot-2', 'defense-bot-3']) {
-      qa.place(defender, { x: 14, y: 1, z: 40 });
-    }
+    const safeDefenderPositions = [
+      { x: -20, y: 80, z: 80 },
+      { x: 0, y: 80, z: 80 },
+      { x: 20, y: 80, z: 80 },
+    ];
+    ['defense-bot-1', 'defense-bot-2', 'defense-bot-3'].forEach((defender, index) => {
+      qa.place(defender, safeDefenderPositions[index]!);
+    });
     const botStart = { ...actor('attack-bot-1').position };
     qa.useLiveCommands();
     const observedBombStates = new Set<string>([qa.bomb.state]);

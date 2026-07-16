@@ -103,7 +103,7 @@ it('routes the unique defuser through multiple nav nodes before interacting at t
 
   const enRoute = squad.sample(context);
   expect(enRoute.get('defense-1')?.moveZ).toBe(-1);
-  expect(Math.abs(enRoute.get('defense-1')?.yaw ?? 0)).toBeCloseTo(Math.PI);
+  expect(enRoute.get('defense-1')?.yaw).toBeCloseTo(Math.atan2(1.5, -10));
   expect(enRoute.get('defense-1')?.interact).toBe(false);
   expect(enRoute.get('defense-2')?.interact).toBe(false);
   expect(enRoute.get('defense-3')?.interact).toBe(false);
@@ -264,12 +264,15 @@ it('counter-pushes defenders toward the nearest living attacker before planting'
     dt: 1 / 60,
   });
 
-  for (const id of ['defense-1', 'defense-2', 'defense-3']) {
-    expect(commands.get(id)).toMatchObject({
-      yaw: -Math.PI / 2,
-      moveZ: -1,
-    });
-  }
+  const left = commands.get('defense-1')!;
+  const center = commands.get('defense-2')!;
+  const right = commands.get('defense-3')!;
+  expect(left.moveZ).toBe(-1);
+  expect(center.moveZ).toBe(-1);
+  expect(right.moveZ).toBe(-1);
+  expect(left.yaw).toBeLessThan(center.yaw);
+  expect(center.yaw).toBeCloseTo(-Math.PI / 2);
+  expect(right.yaw).toBeGreaterThan(center.yaw);
 });
 
 it('routes defender counter-pressure through the navigation graph', () => {
@@ -290,10 +293,15 @@ it('routes defender counter-pressure through the navigation graph', () => {
     dt: 1 / 60,
   });
 
-  for (const id of ['defense-1', 'defense-2', 'defense-3']) {
-    expect(commands.get(id)?.moveZ).toBe(-1);
-    expect(Math.abs(commands.get(id)?.yaw ?? 0)).toBeCloseTo(Math.PI);
-  }
+  const left = commands.get('defense-1')!;
+  const center = commands.get('defense-2')!;
+  const right = commands.get('defense-3')!;
+  expect(left.moveZ).toBe(-1);
+  expect(center.moveZ).toBe(-1);
+  expect(right.moveZ).toBe(-1);
+  expect(Math.abs(left.yaw)).toBeGreaterThan(2.8);
+  expect(Math.abs(center.yaw)).toBeCloseTo(Math.PI);
+  expect(Math.abs(right.yaw)).toBeGreaterThan(2.8);
 });
 
 it('reproduces the first command sequence when reset to the same round', () => {
@@ -382,4 +390,29 @@ it('moves live defenders toward distinct left, center, and right site anchors', 
   expect(left.yaw).toBeGreaterThan(center.yaw);
   expect(center.yaw).toBeCloseTo(0);
   expect(right.yaw).toBeLessThan(center.yaw);
+});
+
+it('keeps advancing squad members on deterministic parallel navigation lanes', () => {
+  const views = actors();
+  views.find(({ id }) => id === 'attack-1')!.position = { x: 0, y: 0, z: 10 };
+  views.find(({ id }) => id === 'attack-2')!.position = { x: 1.5, y: 0, z: 10 };
+  views.find(({ id }) => id === 'defense-1')!.position = { x: -1.5, y: 0, z: -10 };
+  views.find(({ id }) => id === 'defense-2')!.position = { x: 0, y: 0, z: -10 };
+  views.find(({ id }) => id === 'defense-3')!.position = { x: 1.5, y: 0, z: -10 };
+
+  const commands = new BotSquad(ids).sample({
+    round: 1,
+    phase: 'live',
+    actors: views,
+    bomb: bomb(),
+    nav,
+    canSee: () => false,
+    dt: 1 / 60,
+  });
+
+  expect(commands.get('attack-1')?.yaw).toBeCloseTo(0);
+  expect(commands.get('attack-2')?.yaw).toBeCloseTo(0);
+  for (const id of ['defense-1', 'defense-2', 'defense-3']) {
+    expect(Math.abs(commands.get(id)?.yaw ?? 0)).toBeCloseTo(Math.PI);
+  }
 });

@@ -37,8 +37,12 @@ export interface BotSquadContext {
 interface OwnedBot {
   id: EntityId;
   team: Team;
+  laneOffset: number;
   controller: BotController;
 }
+
+const ATTACK_LANE_OFFSETS = [0, 1.5] as const;
+const DEFENSE_LANE_OFFSETS = [1.5, 0, -1.5] as const;
 
 const distance = (left: Vec3, right: Vec3): number => Math.hypot(
   left.x - right.x,
@@ -51,14 +55,44 @@ const planarDistance = (left: Vec3, right: Vec3): number => Math.hypot(
   left.z - right.z,
 );
 
-const routeToward = (nav: NavGraph, from: Vec3, target: Vec3): Vec3 => {
+const offsetAcrossSegment = (
+  position: Vec3,
+  segmentStart: Vec3,
+  segmentEnd: Vec3,
+  laneOffset: number,
+): Vec3 => {
+  const dx = segmentEnd.x - segmentStart.x;
+  const dz = segmentEnd.z - segmentStart.z;
+  const length = Math.hypot(dx, dz);
+  if (length === 0 || laneOffset === 0) return position;
+  return {
+    ...position,
+    x: position.x - (dz / length) * laneOffset,
+    z: position.z + (dx / length) * laneOffset,
+  };
+};
+
+const routeToward = (
+  nav: NavGraph,
+  from: Vec3,
+  target: Vec3,
+  laneOffset: number,
+): Vec3 => {
   const start = nav.nearest(from);
   const goal = nav.nearest(target);
-  if (planarDistance(from, start.position) > 2.0) return start.position;
   if (start.id === goal.id) return target;
   const path = nav.findPath(start.id, goal.id);
   const nextId = path[1] ?? path[0] ?? goal.id;
-  return nav.nodes.find(({ id }) => id === nextId)?.position ?? target;
+  const next = nav.nodes.find(({ id }) => id === nextId);
+  if (!next) return target;
+  const laneStart = offsetAcrossSegment(
+    start.position,
+    start.position,
+    next.position,
+    laneOffset,
+  );
+  if (planarDistance(from, laneStart) > 2.0) return laneStart;
+  return offsetAcrossSegment(next.position, start.position, next.position, laneOffset);
 };
 
 export class BotSquad {
@@ -75,9 +109,13 @@ export class BotSquad {
 
     this.bots = botIds.map((id, index) => {
       const team: Team = index < 2 ? 'attack' : 'defense';
+      const teamIndex = team === 'attack' ? index : index - 2;
       return {
         id,
         team,
+        laneOffset: team === 'attack'
+          ? ATTACK_LANE_OFFSETS[teamIndex]!
+          : DEFENSE_LANE_OFFSETS[teamIndex]!,
         controller: new BotController(id, team, index),
       };
     });
@@ -178,10 +216,20 @@ export class BotSquad {
     context: BotSquadContext,
   ): Vec3 {
     if (bot.team === 'defense' && objective === 'defuse') {
-      return routeToward(context.nav, actor.position, context.bomb.position);
+      return routeToward(
+        context.nav,
+        actor.position,
+        context.bomb.position,
+        bot.laneOffset,
+      );
     }
     if (objective === 'retrieve') {
-      return routeToward(context.nav, actor.position, context.bomb.position);
+      return routeToward(
+        context.nav,
+        actor.position,
+        context.bomb.position,
+        bot.laneOffset,
+      );
     }
 
     if (bot.team === 'defense') {
@@ -191,7 +239,12 @@ export class BotSquad {
           - distance(actor.position, right.position)
           || left.id.localeCompare(right.id))[0];
       if (closestAttacker) {
-        return routeToward(context.nav, actor.position, closestAttacker.position);
+        return routeToward(
+          context.nav,
+          actor.position,
+          closestAttacker.position,
+          bot.laneOffset,
+        );
       }
     }
 
@@ -204,12 +257,13 @@ export class BotSquad {
       return context.nav.nodes.find(({ id }) => id === anchorId)?.position
         ?? site.position;
     }
-    const from = context.nav.nearest(actor.position);
-    if (planarDistance(actor.position, from.position) > 2.0) return from.position;
-    const path = context.nav.findPath(from.id, site.id);
-    const nextId = path[1] ?? path[0] ?? site.id;
-    const target = context.nav.nodes.find(({ id }) => id === nextId)?.position ?? site.position;
-    return objective === 'plant' && nextId === site.id
+    const target = routeToward(
+      context.nav,
+      actor.position,
+      site.position,
+      bot.laneOffset,
+    );
+    return objective === 'plant' && planarDistance(target, site.position) < 0.01
       ? { ...target, y: actor.position.y }
       : target;
   }
