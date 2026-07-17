@@ -148,3 +148,19 @@ it('connects both attack routes through the corner turn', () => {
     'mid-right',
   ]);
 });
+
+it('keeps every defense spawn exit connected in both directions', () => {
+  const map = createBorderStationGraybox();
+  const nav = new NavGraph(map.navNodes);
+
+  expect(map.navNodes.find(({ id }) => id === 'defense-left')?.neighbors)
+    .toContain('defense');
+  expect(map.navNodes.find(({ id }) => id === 'defense-center')?.neighbors)
+    .toContain('defense');
+  expect(map.navNodes.find(({ id }) => id === 'defense-right')?.neighbors)
+    .toContain('defense');
+  expect(nav.findPath('defense', 'site-left').at(-1)).toBe('site-left');
+  expect(nav.findPath('site-left', 'defense').at(-1)).toBe('defense');
+  expect(nav.findPath('site', 'defense').at(-1)).toBe('defense');
+  expect(nav.findPath('site-right', 'defense').at(-1)).toBe('defense');
+});

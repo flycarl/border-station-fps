@@ -207,22 +207,29 @@ it('steers a displaced retriever back to the authored corridor before advancing'
   expect(commands.get('attack-1')?.yaw).toBeCloseTo(Math.PI / 2);
 });
 
-it('re-enters the corridor before pursuing a same-node interaction target', () => {
+it('keeps advancing toward a same-node interaction target across the old two-metre boundary', () => {
   const views = actors();
-  views.find(({ id }) => id === 'attack-1')!.position = { x: 0, y: 0, z: 4 };
   views.find(({ id }) => id === 'attack-2')!.position = { x: 8, y: 0, z: 10 };
-  const commands = new BotSquad(ids).sample({
-    round: 3,
-    phase: 'live',
-    actors: views,
-    bomb: bomb({ state: 'dropped', carrierId: null, position: { x: 1, y: 0, z: 4 } }),
-    nav,
-    canSee: () => false,
-    dt: 1 / 60,
-  });
+  const squad = new BotSquad(ids);
 
-  expect(commands.get('attack-1')).toMatchObject({ moveZ: -1, interact: false });
-  expect(commands.get('attack-1')?.yaw).toBeCloseTo(0);
+  for (const z of [0.5, 1.5, 2.5, 3.5]) {
+    views.find(({ id }) => id === 'attack-1')!.position = { x: 0, y: 0, z };
+    const commands = squad.sample({
+      round: 3,
+      phase: 'live',
+      actors: views,
+      bomb: bomb({ state: 'dropped', carrierId: null, position: { x: 0, y: 0, z: 4.5 } }),
+      nav,
+      canSee: () => false,
+      dt: 1 / 60,
+    });
+
+    expect(commands.get('attack-1')).toMatchObject({
+      moveZ: z === 3.5 ? 0 : -1,
+      interact: z === 3.5,
+    });
+    expect(Math.abs(commands.get('attack-1')?.yaw ?? 0)).toBeCloseTo(Math.PI);
+  }
 });
 
 it.each([

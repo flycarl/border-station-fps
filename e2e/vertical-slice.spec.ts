@@ -204,15 +204,21 @@ test('bots keep safe spacing in deterministic opening lanes', async ({ page }) =
       right: { x: number; z: number },
     ) => Math.hypot(left.x - right.x, left.z - right.z);
     const minimumTeamSpacing = (actors: ReturnType<typeof bots>) => {
-      let minimum = Number.POSITIVE_INFINITY;
+      let minimum = { distance: Number.POSITIVE_INFINITY, pair: '' };
       for (const team of ['attack', 'defense']) {
         const teammates = actors.filter((actor) => actor.team === team);
         for (let left = 0; left < teammates.length; left++) {
           for (let right = left + 1; right < teammates.length; right++) {
-            minimum = Math.min(minimum, planarDistance(
+            const distance = planarDistance(
               teammates[left]!.position,
               teammates[right]!.position,
-            ));
+            );
+            if (distance < minimum.distance) {
+              minimum = {
+                distance,
+                pair: `${teammates[left]!.id}/${teammates[right]!.id}`,
+              };
+            }
           }
         }
       }
@@ -225,7 +231,8 @@ test('bots keep safe spacing in deterministic opening lanes', async ({ page }) =
     let minimumSpacing = minimumTeamSpacing(start);
     for (let sample = 0; sample < 24; sample++) {
       qa.advance(10);
-      minimumSpacing = Math.min(minimumSpacing, minimumTeamSpacing(bots()));
+      const sampleSpacing = minimumTeamSpacing(bots());
+      if (sampleSpacing.distance < minimumSpacing.distance) minimumSpacing = sampleSpacing;
     }
     const finish = bots();
     return {
@@ -240,9 +247,72 @@ test('bots keep safe spacing in deterministic opening lanes', async ({ page }) =
     };
   });
 
-  expect(opening.minimumSpacing).toBeGreaterThan(1.2);
+  expect(opening.minimumSpacing.distance, opening.minimumSpacing.pair).toBeGreaterThan(1.2);
   for (const actor of opening.displacements) {
     expect(actor.distance, `${actor.id} opening progress`).toBeGreaterThan(1.5);
+  }
+});
+
+test('every bot leaves spawn with sustained forward progress instead of trembling', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  const trajectories = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const bots = () => qa.state.actors
+      .filter(({ id }) => id.includes('bot'))
+      .map(({ id, team, position }) => ({ id, team, position: { ...position } }));
+    qa.useLiveCommands();
+    qa.advance(181);
+
+    const samples = [bots()];
+    for (let sample = 0; sample < 18; sample++) {
+      qa.advance(10);
+      samples.push(bots());
+    }
+
+    return samples[0]!.map((start) => {
+      let cumulativeDistance = 0;
+      let stationarySamples = 0;
+      let reversals = 0;
+      let previousDx = 0;
+      let previousDz = 0;
+      for (let index = 1; index < samples.length; index++) {
+        const previous = samples[index - 1]!.find(({ id }) => id === start.id)!;
+        const current = samples[index]!.find(({ id }) => id === start.id)!;
+        const dx = current.position.x - previous.position.x;
+        const dz = current.position.z - previous.position.z;
+        const stepDistance = Math.hypot(dx, dz);
+        cumulativeDistance += stepDistance;
+        if (stepDistance < 0.2) stationarySamples++;
+        if (index > 1 && dx * previousDx + dz * previousDz < -0.08) reversals++;
+        previousDx = dx;
+        previousDz = dz;
+      }
+      const finish = samples.at(-1)!.find(({ id }) => id === start.id)!;
+      const netDistance = Math.hypot(
+        finish.position.x - start.position.x,
+        finish.position.z - start.position.z,
+      );
+      return {
+        id: start.id,
+        team: start.team,
+        forwardProgress: start.team === 'attack'
+          ? start.position.z - finish.position.z
+          : finish.position.z - start.position.z,
+        netDistance,
+        efficiency: cumulativeDistance > 0 ? netDistance / cumulativeDistance : 0,
+        stationarySamples,
+        reversals,
+      };
+    });
+  });
+
+  for (const bot of trajectories) {
+    expect(bot.forwardProgress, `${bot.id} forward progress`).toBeGreaterThan(4);
+    expect(bot.netDistance, `${bot.id} net progress`).toBeGreaterThan(7);
+    expect(bot.efficiency, `${bot.id} route efficiency`).toBeGreaterThan(0.55);
+    expect(bot.stationarySamples, `${bot.id} stationary samples`).toBeLessThanOrEqual(3);
+    expect(bot.reversals, `${bot.id} direction reversals`).toBeLessThanOrEqual(2);
   }
 });
 
@@ -642,7 +712,8 @@ test('surviving attackers recover and plant the human carrier bomb after human d
     },
     weaponVisible: true,
   });
-  expect(result.nextRound.cameraPose.position.y).toBeCloseTo(1.65, 2);
+  expect(result.nextRound.cameraPose.position.y)
+    .toBeCloseTo(result.nextRound.human.position.y + 0.65, 2);
   expect(result.viewWeaponVisible).toBe(false);
 });
 

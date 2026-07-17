@@ -72,6 +72,38 @@ const offsetAcrossSegment = (
   };
 };
 
+const closestPointOnLane = (
+  position: Vec3,
+  segmentStart: Vec3,
+  segmentEnd: Vec3,
+  laneOffset: number,
+): Vec3 => {
+  const laneStart = offsetAcrossSegment(
+    segmentStart,
+    segmentStart,
+    segmentEnd,
+    laneOffset,
+  );
+  const laneEnd = offsetAcrossSegment(
+    segmentEnd,
+    segmentStart,
+    segmentEnd,
+    laneOffset,
+  );
+  const dx = laneEnd.x - laneStart.x;
+  const dz = laneEnd.z - laneStart.z;
+  const lengthSquared = dx * dx + dz * dz;
+  if (lengthSquared === 0) return laneStart;
+  const progress = Math.max(0, Math.min(1, (
+    (position.x - laneStart.x) * dx + (position.z - laneStart.z) * dz
+  ) / lengthSquared));
+  return {
+    ...laneStart,
+    x: laneStart.x + dx * progress,
+    z: laneStart.z + dz * progress,
+  };
+};
+
 const routeToward = (
   nav: NavGraph,
   from: Vec3,
@@ -81,21 +113,27 @@ const routeToward = (
   const start = nav.nearest(from);
   const goal = nav.nearest(target);
   if (start.id === goal.id) {
-    return planarDistance(from, start.position) > 2.0
-      ? start.position
+    const sameNodeLaneEntry = closestPointOnLane(
+      from,
+      start.position,
+      target,
+      0,
+    );
+    return planarDistance(from, sameNodeLaneEntry) > 2.0
+      ? sameNodeLaneEntry
       : target;
   }
   const path = nav.findPath(start.id, goal.id);
   const nextId = path[1] ?? path[0] ?? goal.id;
   const next = nav.nodes.find(({ id }) => id === nextId);
   if (!next) return target;
-  const laneStart = offsetAcrossSegment(
-    start.position,
+  const laneEntry = closestPointOnLane(
+    from,
     start.position,
     next.position,
     laneOffset,
   );
-  if (planarDistance(from, laneStart) > 2.0) return laneStart;
+  if (planarDistance(from, laneEntry) > 2.0) return laneEntry;
   return offsetAcrossSegment(next.position, start.position, next.position, laneOffset);
 };
 
@@ -237,6 +275,29 @@ export class BotSquad {
     }
 
     if (bot.team === 'defense') {
+      const defenderIndex = this.bots
+        .filter(({ team }) => team === 'defense')
+        .findIndex(({ id }) => id === bot.id);
+      const openingExitId = [
+        'defense-left',
+        'defense-center',
+        'defense-right',
+      ][defenderIndex];
+      const openingFrontId = [
+        'site-left',
+        'site',
+        'site-right',
+      ][defenderIndex];
+      const nearestNodeId = context.nav.nearest(actor.position).id;
+      const openingTargetId = nearestNodeId === 'defense'
+        ? openingExitId
+        : nearestNodeId === openingExitId
+          ? openingFrontId
+          : undefined;
+      if (openingTargetId) {
+        const openingTarget = context.nav.nodes.find(({ id }) => id === openingTargetId);
+        if (openingTarget) return openingTarget.position;
+      }
       const closestAttacker = context.actors
         .filter((candidate) => candidate.team === 'attack' && candidate.alive)
         .sort((left, right) => distance(actor.position, left.position)
