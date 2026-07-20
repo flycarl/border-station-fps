@@ -31,14 +31,18 @@ export interface BotContext {
 
 type BotState = 'advance' | 'engage' | 'plant' | 'retrieve' | 'hold' | 'defuse';
 
-const MAX_ENGAGE_DISTANCE = 42;
-const VIEW_CONE_COSINE = Math.cos((120 * Math.PI / 180) / 2);
+const MAX_ENGAGE_DISTANCE = 34;
+const VIEW_CONE_COSINE = Math.cos((105 * Math.PI / 180) / 2);
 const INTERACT_DISTANCE = 1.5;
 const HOLD_RADIUS = 1.5;
 const PRESSURE_DISTANCE = 15;
 const AIM_ERROR_INTERVAL = 0.35;
-const AIM_ERROR_YAW_BOUND = 0.060;
-const AIM_ERROR_PITCH_BOUND = 0.040;
+const AIM_ERROR_YAW_BOUND = 0.115;
+const AIM_ERROR_PITCH_BOUND = 0.080;
+const REACTION_DELAY_MIN = 0.4;
+const REACTION_DELAY_SPREAD = 0.3;
+const FIRE_BURST_DURATION = 0.32;
+const FIRE_BURST_CYCLE = 0.7;
 const MIN_PLANAR_PROGRESS = 0.01;
 const STALL_TRIGGER_TIME = 0.5;
 const RECOVERY_DURATION = 0.6;
@@ -102,7 +106,9 @@ export class BotController {
       this.state = 'engage';
       this.aimAt(command, context.self.position, enemy.position);
       this.moveWhileEngaging(command, context.self.position, enemy.position);
-      command.fire = this.reactionElapsed >= this.reactionDelay;
+      const firingElapsed = this.reactionElapsed - this.reactionDelay;
+      command.fire = firingElapsed >= 0
+        && firingElapsed % FIRE_BURST_CYCLE < FIRE_BURST_DURATION;
       return this.applyStuckRecovery(command, context);
     }
 
@@ -150,7 +156,8 @@ export class BotController {
     if (this.targetId !== targetId) {
       this.targetId = targetId;
       this.reactionElapsed = 0;
-      this.reactionDelay = 0.16 + this.random() * 0.22;
+      this.reactionDelay = REACTION_DELAY_MIN
+        + this.random() * REACTION_DELAY_SPREAD;
       this.aimErrorElapsed = 0;
       this.resampleAimError();
       this.strafeDirection = this.random() < 0.5 ? -1 : 1;

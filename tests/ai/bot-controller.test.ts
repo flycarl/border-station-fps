@@ -23,32 +23,32 @@ it('does not fire at an occluded enemy', () => {
     },
     objective: 'hold',
     targetNode: { x: 0, y: 0, z: -2 },
-    dt: 1,
+    dt: 0.7,
   });
 
   expect(canSeeCalls).toBe(1);
   expect(command.fire).toBe(false);
 });
 
-it('requires both range and the 120-degree view cone to engage', () => {
+it('requires both the reduced 34-metre range and 105-degree view cone to engage', () => {
   const outOfCone = new BotController('bot-cone', 'defense', 3);
   const outOfRange = new BotController('bot-range', 'defense', 3);
   const widenedCone = new BotController('bot-wide-cone', 'defense', 3);
 
   const coneCommand = outOfCone.update({
     ...baseContext(),
-    enemies: [{ id: 'enemy', position: { x: 10, y: 0, z: -5 }, alive: true }],
-    dt: 1,
+    enemies: [{ id: 'enemy', position: { x: 10, y: 0, z: -7 }, alive: true }],
+    dt: 0.7,
   });
   const rangeCommand = outOfRange.update({
     ...baseContext(),
-    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -43 }, alive: true }],
-    dt: 1,
+    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -35 }, alive: true }],
+    dt: 0.7,
   });
   const widenedConeCommand = widenedCone.update({
     ...baseContext(),
-    enemies: [{ id: 'enemy', position: { x: 10, y: 0, z: -7 }, alive: true }],
-    dt: 1,
+    enemies: [{ id: 'enemy', position: { x: 10, y: 0, z: -8 }, alive: true }],
+    dt: 0.7,
   });
 
   expect(coneCommand.fire).toBe(false);
@@ -58,7 +58,7 @@ it('requires both range and the 120-degree view cone to engage', () => {
 
 // The final seed produces a first PRNG sample of 0.9999999997671694.
 it.each([0, 1, 7, 653_637_408])(
-  'waits at least 0.16 seconds and fires by exactly 0.38 seconds for seed %i',
+  'waits at least 0.4 seconds and fires by exactly 0.7 seconds for seed %i',
   (seed) => {
     const earlyBot = new BotController('bot-early', 'defense', seed);
     const boundaryBot = new BotController('bot-boundary', 'defense', seed);
@@ -67,10 +67,25 @@ it.each([0, 1, 7, 653_637_408])(
       enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
     };
 
-    expect(earlyBot.update({ ...context, dt: 0.159_999 }).fire).toBe(false);
-    expect(boundaryBot.update({ ...context, dt: 0.38 }).fire).toBe(true);
+    expect(earlyBot.update({ ...context, dt: 0.399_999 }).fire).toBe(false);
+    expect(boundaryBot.update({ ...context, dt: 0.7 }).fire).toBe(true);
   },
 );
+
+it('fires again after the precise burst and pause boundaries', () => {
+  const bot = new BotController('bot-burst', 'defense', 653_637_408);
+  const context = {
+    ...baseContext(),
+    enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
+  };
+
+  expect(bot.update({ ...context, dt: 0.699_999 }).fire).toBe(false);
+  expect(bot.update({ ...context, dt: 0.000_001 }).fire).toBe(true);
+  expect(bot.update({ ...context, dt: 0.319_998 }).fire).toBe(true);
+  expect(bot.update({ ...context, dt: 0.000_002 }).fire).toBe(false);
+  expect(bot.update({ ...context, dt: 0.379_998 }).fire).toBe(false);
+  expect(bot.update({ ...context, dt: 0.000_002 }).fire).toBe(true);
+});
 
 it('keeps pressure with deterministic advance and strafe movement while engaging at range', () => {
   const first = new BotController('bot-pressure', 'defense', 7);
@@ -109,11 +124,11 @@ it('keeps wider seeded aim error stable until the 0.35-second resample boundary'
   expect(firstSequence[2]!.yaw).not.toBe(firstSequence[1]!.yaw);
   expect(firstSequence[2]!.pitch).not.toBe(firstSequence[1]!.pitch);
   for (const command of firstSequence) {
-    expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.060);
-    expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.040);
+    expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.115);
+    expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.080);
   }
-  expect(firstSequence.some((command) => Math.abs(command.yaw) > 0.035
-    || Math.abs(command.pitch) > 0.020)).toBe(true);
+  expect(firstSequence.some((command) => Math.abs(command.yaw) > 0.065
+    || Math.abs(command.pitch) > 0.040)).toBe(true);
   expect(replaySequence).toEqual(firstSequence);
 });
 

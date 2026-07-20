@@ -352,13 +352,13 @@ test('live bots recover from the site and flank cover traps', async ({ page }) =
   }
 });
 
-test('live bots engage at expanded range through the clear corner lane', async ({ page }) => {
+test('weakened bots engage inside their reduced range and pause between bursts', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
   await advanceToLive(page);
   const engagement = await page.evaluate(() => {
     const qa = window.__THREE_GAME_QA__!;
-    qa.place('attack-human', { x: 14, y: 1, z: -5 });
+    qa.place('attack-human', { x: 14, y: 1, z: 5 });
     qa.place('attack-bot-1', { x: -14, y: 1, z: -40 });
     qa.place('attack-bot-2', { x: -13, y: 1, z: -40 });
     qa.place('defense-bot-1', { x: 14, y: 1, z: 35 });
@@ -375,7 +375,7 @@ test('live bots engage at expanded range through the clear corner lane', async (
     );
     qa.useLiveCommands();
     const samples = [];
-    for (let tick = 0; tick < 30; tick++) {
+    for (let tick = 0; tick < 100; tick++) {
       qa.advance(1);
       samples.push(qa.actorCommand('defense-bot-1'));
     }
@@ -383,8 +383,18 @@ test('live bots engage at expanded range through the clear corner lane', async (
   });
 
   expect(engagement.clearLane).toBe(true);
-  expect(engagement.separation).toBeGreaterThanOrEqual(40);
-  expect(engagement.samples.some((command) => command.fire)).toBe(true);
+  expect(engagement.separation).toBeGreaterThanOrEqual(29);
+  expect(engagement.separation).toBeLessThan(34);
+  const firstShot = engagement.samples.findIndex((command) => command.fire);
+  expect(firstShot).toBeGreaterThanOrEqual(0);
+  const firstPause = engagement.samples.findIndex(
+    (command, index) => index > firstShot && !command.fire,
+  );
+  expect(firstPause).toBeGreaterThan(firstShot);
+  const secondBurst = engagement.samples.findIndex(
+    (command, index) => index > firstPause && command.fire,
+  );
+  expect(secondBurst).toBeGreaterThan(firstPause);
   expect(engagement.samples.some((command) => Math.abs(command.moveX) > 0)).toBe(true);
   expect(engagement.samples.some((command) => command.moveZ < 0)).toBe(true);
 });
