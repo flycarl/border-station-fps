@@ -68,6 +68,7 @@ test('starts a nonblank match and exposes restart', async ({ page }, testInfo) =
     geometries: window.__THREE_GAME_DIAGNOSTICS__?.renderer.geometries,
     bodies: window.__THREE_GAME_DIAGNOSTICS__?.physics.bodies,
     colliders: window.__THREE_GAME_DIAGNOSTICS__?.physics.colliders,
+    healthBars: window.__THREE_GAME_DIAGNOSTICS__?.physics.healthBars,
   }));
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: '重新开始' })).toBeVisible();
@@ -79,8 +80,26 @@ test('starts a nonblank match and exposes restart', async ({ page }, testInfo) =
     geometries: window.__THREE_GAME_DIAGNOSTICS__?.renderer.geometries,
     bodies: window.__THREE_GAME_DIAGNOSTICS__?.physics.bodies,
     colliders: window.__THREE_GAME_DIAGNOSTICS__?.physics.colliders,
+    healthBars: window.__THREE_GAME_DIAGNOSTICS__?.physics.healthBars,
   }));
-  expect(afterRestart).toEqual(beforeRestart);
+  await page.evaluate(() => {
+    window.__THREE_GAME_DIAGNOSTICS__?.restart();
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  });
+  const afterSecondRestart = await page.evaluate(() => ({
+    geometries: window.__THREE_GAME_DIAGNOSTICS__?.renderer.geometries,
+    bodies: window.__THREE_GAME_DIAGNOSTICS__?.physics.bodies,
+    colliders: window.__THREE_GAME_DIAGNOSTICS__?.physics.colliders,
+    healthBars: window.__THREE_GAME_DIAGNOSTICS__?.physics.healthBars,
+  }));
+  expect(afterRestart).toMatchObject({
+    bodies: beforeRestart.bodies,
+    colliders: beforeRestart.colliders,
+    healthBars: 5,
+  });
+  expect(afterSecondRestart).toEqual(afterRestart);
   expect(audit.consoleErrors).toEqual([]);
   expect(audit.pageErrors).toEqual([]);
   expect(audit.failedRequests).toEqual([]);
@@ -520,6 +539,145 @@ test('combat HUD and visible bullet tracers reflect authoritative play state', a
     return window.__THREE_GAME_DIAGNOSTICS__!.physics.tracers;
   });
   expect(expired).toBe(0);
+});
+
+test('bots empty their real magazine and wait for the full reload timer', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
+  const reloadCycle = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.place('defense-bot-1', { x: 14, y: 1, z: 20 });
+    qa.place('attack-human', { x: -14, y: 1, z: 35 });
+    qa.place('attack-bot-1', { x: -13, y: 1, z: 35 });
+    qa.place('attack-bot-2', { x: -12, y: 1, z: 35 });
+    qa.place('defense-bot-2', { x: -14, y: 1, z: -35 });
+    qa.place('defense-bot-3', { x: -13, y: 1, z: -35 });
+    qa.command('defense-bot-1', { fire: true, slot: 1, yaw: 0, pitch: 0 });
+
+    let ticks = 0;
+    while (ticks < 600) {
+      qa.advance(1);
+      ticks += 1;
+      const state = qa.actorWeaponState('defense-bot-1');
+      if (state.magazine === 0 && state.reloadEndsAt !== null) break;
+    }
+    const empty = qa.actorWeaponState('defense-bot-1');
+    const emptyCommand = qa.actorCommand('defense-bot-1');
+    qa.advance(140);
+    const beforeComplete = qa.actorWeaponState('defense-bot-1');
+    qa.advance(2);
+    const completed = qa.actorWeaponState('defense-bot-1');
+    return { ticks, empty, emptyCommand, beforeComplete, completed };
+  });
+
+  expect(reloadCycle.ticks).toBeLessThan(600);
+  expect(reloadCycle.empty).toMatchObject({ magazine: 0, reserve: 90 });
+  expect(reloadCycle.empty.reloadEndsAt).not.toBeNull();
+  expect(reloadCycle.emptyCommand).toMatchObject({ fire: false, reload: true });
+  expect(reloadCycle.beforeComplete).toMatchObject({ magazine: 0, reserve: 90 });
+  expect(reloadCycle.completed).toMatchObject({
+    magazine: 29,
+    reserve: 60,
+    reloadEndsAt: null,
+  });
+});
+
+test('live bot AI reloads its last reserve round then remains out of ammo', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
+  const exhausted = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.place('attack-human', { x: 14, y: 1, z: 10 });
+    qa.place('defense-bot-1', { x: 14, y: 1, z: 4 });
+    for (const id of ['attack-bot-1', 'attack-bot-2']) qa.place(id, { x: -14, y: 1, z: 35 });
+    for (const id of ['defense-bot-2', 'defense-bot-3']) qa.place(id, { x: -14, y: 1, z: -35 });
+    qa.command('defense-bot-1', { yaw: Math.PI });
+    qa.advance(1);
+    qa.setActorWeaponState('defense-bot-1', { magazine: 1, reserve: 1, reloadEndsAt: null });
+    qa.useLiveCommands();
+
+    let sawReload = false;
+    let ticks = 0;
+    while (ticks < 600) {
+      qa.advance(1);
+      ticks += 1;
+      const weapon = qa.actorWeaponState('defense-bot-1');
+      if (weapon.reloadEndsAt !== null) sawReload = true;
+      if (sawReload && weapon.magazine === 0 && weapon.reserve === 0
+        && weapon.reloadEndsAt === null) break;
+    }
+    qa.advance(30);
+    return {
+      ticks,
+      sawReload,
+      weapon: qa.actorWeaponState('defense-bot-1'),
+      command: qa.actorCommand('defense-bot-1'),
+    };
+  });
+
+  expect(exhausted.ticks).toBeLessThan(600);
+  expect(exhausted.sawReload).toBe(true);
+  expect(exhausted.weapon).toMatchObject({
+    magazine: 0,
+    reserve: 0,
+    reloadEndsAt: null,
+  });
+  expect(exhausted.command).toMatchObject({ fire: false, reload: false });
+});
+
+test('visible living bots show an authoritative world-space health bar', async ({ page }, testInfo) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
+  const visibleHealthBar = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.place('attack-human', { x: 14, y: 1, z: 10 });
+    qa.place('defense-bot-1', { x: 14, y: 1, z: 4 });
+    for (const id of ['attack-bot-1', 'attack-bot-2']) qa.place(id, { x: -14, y: 1, z: 35 });
+    for (const id of ['defense-bot-2', 'defense-bot-3']) qa.place(id, { x: -14, y: 1, z: -35 });
+    qa.command('attack-human', { fire: true, slot: 1, yaw: 0, pitch: 0 });
+    qa.advance(1);
+    qa.command('attack-human', { fire: false, slot: 1, yaw: 0, pitch: 0 });
+    qa.advance(1);
+    const damagedHealth = qa.state.actors.find(({ id }) => id === 'defense-bot-1')!.health;
+    const visible = qa.actorWorldStatus('defense-bot-1');
+    return { damagedHealth, visible };
+  });
+
+  expect(visibleHealthBar.damagedHealth).toBeLessThan(100);
+  expect(visibleHealthBar.visible).toMatchObject({
+    healthBarVisible: true,
+    healthFraction: visibleHealthBar.damagedHealth / 100,
+  });
+  await page.locator('.mission-modal').evaluate((element) => element.remove());
+  await page.screenshot({ path: testInfo.outputPath('visible-bot-health-bar-1440x900.png') });
+
+  const behindCamera = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.command('attack-human', { yaw: Math.PI, fire: false });
+    qa.advance(1);
+    return {
+      lineOfSight: qa.canActorsSee('attack-human', 'defense-bot-1'),
+      status: qa.actorWorldStatus('defense-bot-1'),
+    };
+  });
+  expect(behindCamera.lineOfSight).toBe(true);
+  expect(behindCamera.status?.healthBarVisible).toBe(false);
+
+  const occludedHealthBar = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.command('attack-human', { yaw: 0, fire: false });
+    qa.place('defense-bot-1', { x: -14, y: 1, z: -35 });
+    qa.advance(1);
+    const lineOfSight = qa.canActorsSee('attack-human', 'defense-bot-1');
+    const hidden = qa.actorWorldStatus('defense-bot-1');
+    return { lineOfSight, hidden };
+  });
+
+  expect(occludedHealthBar.lineOfSight).toBe(false);
+  expect(occludedHealthBar.hidden?.healthBarVisible).toBe(false);
 });
 
 test('keeps play paused when pointer lock is rejected and resumes only after confirmation', async ({ page }) => {

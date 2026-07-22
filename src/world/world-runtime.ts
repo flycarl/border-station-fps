@@ -30,6 +30,8 @@ export interface PlayerWorldStatus {
   active: boolean;
   raycastRegistered: boolean;
   meshVisible: boolean;
+  healthBarVisible: boolean;
+  healthFraction: number;
 }
 
 export interface WorldDiagnostics {
@@ -37,6 +39,7 @@ export interface WorldDiagnostics {
   timestep: number;
   bodies: number;
   colliders: number;
+  healthBars: number;
   sensors: number;
   ccdBodies: number;
   tracers: number;
@@ -57,6 +60,69 @@ const PLAYER_LINEAR_DAMPING = 0.8;
 const ACTIVE_COLLISION_GROUPS = 0xffffffff;
 const INACTIVE_COLLISION_GROUPS = 0;
 const BOMB_SITE_MARKER_Y = 0.012;
+const HEALTH_BAR_WIDTH = 0.9;
+
+export interface PlayerHealthBar {
+  group: THREE.Group;
+  fill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  fillMaterial: THREE.MeshBasicMaterial;
+  healthFraction: number;
+  dispose(): void;
+}
+
+export function createPlayerHealthBar(): PlayerHealthBar {
+  const group = new THREE.Group();
+  group.name = 'player-health-bar';
+  group.visible = false;
+  group.renderOrder = 20;
+  const backgroundGeometry = new THREE.PlaneGeometry(0.98, 0.13);
+  const backgroundMaterial = new THREE.MeshBasicMaterial({
+    color: 0x101820,
+    transparent: true,
+    opacity: 0.86,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const background = new THREE.Mesh(backgroundGeometry, backgroundMaterial);
+  const fillGeometry = new THREE.PlaneGeometry(HEALTH_BAR_WIDTH, 0.075);
+  const fillMaterial = new THREE.MeshBasicMaterial({
+    color: 0x58d68d,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const fill = new THREE.Mesh(fillGeometry, fillMaterial);
+  fill.position.z = 0.002;
+  group.add(background, fill);
+  const bar: PlayerHealthBar = {
+    group,
+    fill,
+    fillMaterial,
+    healthFraction: 1,
+    dispose() {
+      group.removeFromParent();
+      backgroundGeometry.dispose();
+      backgroundMaterial.dispose();
+      fillGeometry.dispose();
+      fillMaterial.dispose();
+    },
+  };
+  return bar;
+}
+
+export function updatePlayerHealthBarVisual(
+  bar: PlayerHealthBar,
+  health: number,
+  visible: boolean,
+): void {
+  const fraction = Math.max(0, Math.min(1, health / 100));
+  bar.healthFraction = fraction;
+  bar.group.visible = visible && fraction > 0;
+  bar.fill.scale.x = fraction;
+  bar.fill.position.x = -HEALTH_BAR_WIDTH * (1 - fraction) / 2;
+  bar.fillMaterial.color.setHex(
+    fraction > 0.6 ? 0x58d68d : fraction > 0.3 ? 0xffc247 : 0xff4d5e,
+  );
+}
 
 export interface BombSiteMarkerDiagnostics {
   visible: boolean;
@@ -160,6 +226,7 @@ export class WorldRuntime {
   private readonly playerBodies = new Map<EntityId, RAPIER.RigidBody>();
   private readonly inactivePlayers = new Set<EntityId>();
   private readonly playerMeshes = new Map<EntityId, THREE.Mesh>();
+  private readonly playerHealthBars = new Map<EntityId, PlayerHealthBar>();
   private readonly supportColliderHandles = new Set<number>();
   private bombSiteMarker: THREE.Group | null = null;
   private firstPersonWeapon: FirstPersonWeaponRig | null = null;
@@ -239,6 +306,11 @@ export class WorldRuntime {
       mesh.position.set(position.x, position.y, position.z);
       this.scene.add(mesh);
       this.playerMeshes.set(entityId, mesh);
+      if (entityId !== 'attack-human') {
+        const healthBar = createPlayerHealthBar();
+        this.scene.add(healthBar.group);
+        this.playerHealthBars.set(entityId, healthBar);
+      }
     }
     return body;
   }
@@ -260,6 +332,8 @@ export class WorldRuntime {
       for (const material of materials) material.dispose();
     }
     this.playerMeshes.delete(entityId);
+    this.playerHealthBars.get(entityId)?.dispose();
+    this.playerHealthBars.delete(entityId);
   }
 
   setPlayerActive(entityId: EntityId, active: boolean): void {
@@ -282,6 +356,20 @@ export class WorldRuntime {
     }
     const mesh = this.playerMeshes.get(entityId);
     if (mesh) mesh.visible = active && entityId !== 'attack-human';
+    if (!active) {
+      const healthBar = this.playerHealthBars.get(entityId);
+      if (healthBar) healthBar.group.visible = false;
+    }
+  }
+
+  updatePlayerHealthBar(entityId: EntityId, health: number, visible: boolean): void {
+    const healthBar = this.playerHealthBars.get(entityId);
+    if (!healthBar) return;
+    updatePlayerHealthBarVisual(
+      healthBar,
+      health,
+      visible && !this.inactivePlayers.has(entityId),
+    );
   }
 
   playerStatus(entityId: EntityId): PlayerWorldStatus | null {
@@ -297,6 +385,8 @@ export class WorldRuntime {
       active: !this.inactivePlayers.has(entityId),
       raycastRegistered,
       meshVisible: this.playerMeshes.get(entityId)?.visible ?? false,
+      healthBarVisible: this.playerHealthBars.get(entityId)?.group.visible ?? false,
+      healthFraction: this.playerHealthBars.get(entityId)?.healthFraction ?? 0,
     };
   }
 
@@ -374,13 +464,18 @@ export class WorldRuntime {
 
   render(cameraPose: CameraPose): void {
     if (!this.camera || !this.renderer || !this.scene) return;
+    applyCameraPose(this.camera, cameraPose);
     for (const [entityId, mesh] of this.playerMeshes) {
       const body = this.playerBodies.get(entityId);
       if (!body) continue;
       const position = body.translation();
       mesh.position.set(position.x, position.y, position.z);
+      const healthBar = this.playerHealthBars.get(entityId);
+      if (healthBar && this.camera) {
+        healthBar.group.position.set(position.x, position.y + 1.15, position.z);
+        healthBar.group.quaternion.copy(this.camera.quaternion);
+      }
     }
-    applyCameraPose(this.camera, cameraPose);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -392,6 +487,7 @@ export class WorldRuntime {
       timestep: this.physicsWorld.timestep,
       bodies: this.physicsWorld.bodies.len(),
       colliders: this.physicsWorld.colliders.len(),
+      healthBars: this.playerHealthBars.size,
       sensors: 0,
       ccdBodies: 0,
       tracers: this.bulletTracers.diagnostics().active,

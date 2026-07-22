@@ -18,7 +18,10 @@ import { createPlayerState, type PlayerState } from './player/player-state';
 import { Hud, type HudSnapshot } from './ui/hud';
 import { StartScreen } from './ui/start-screen';
 import { WEAPONS } from './weapons/weapon-data';
-import { WeaponSystem } from './weapons/weapon-system';
+import {
+  WeaponSystem,
+  type WeaponState,
+} from './weapons/weapon-system';
 import { createBorderStationGraybox } from './world/border-station-graybox';
 import {
   WorldRuntime,
@@ -29,6 +32,18 @@ import {
 
 const FIXED_STEP = 1 / 60;
 const EYE_HEIGHT = 0.65;
+
+export function applyBotAmmoIntent(
+  command: PlayerCommand,
+  weapon: Pick<WeaponState, 'magazine' | 'reserve'>,
+): PlayerCommand {
+  if (weapon.magazine > 0) return command;
+  return {
+    ...command,
+    fire: false,
+    reload: weapon.reserve > 0,
+  };
+}
 
 export function calculateTracerOrigin(eye: Vec3, yaw: number, pitch: number): Vec3 {
   const cosPitch = Math.cos(pitch);
@@ -43,6 +58,33 @@ export function calculateTracerOrigin(eye: Vec3, yaw: number, pitch: number): Ve
     y: eye.y + forward.y * 0.42 - 0.12,
     z: eye.z + forward.z * 0.42 + right.z * 0.18,
   };
+}
+
+export function isPointWithinCameraView(
+  cameraPose: CameraPose,
+  point: Vec3,
+  aspect: number,
+  verticalFovRadians = 75 * Math.PI / 180,
+): boolean {
+  const dx = point.x - cameraPose.position.x;
+  const dy = point.y - cameraPose.position.y;
+  const dz = point.z - cameraPose.position.z;
+  const sinYaw = Math.sin(cameraPose.yaw);
+  const cosYaw = Math.cos(cameraPose.yaw);
+  const sinPitch = Math.sin(cameraPose.pitch);
+  const cosPitch = Math.cos(cameraPose.pitch);
+  const forwardDistance = dx * (-sinYaw * cosPitch)
+    + dy * sinPitch
+    + dz * (-cosYaw * cosPitch);
+  if (forwardDistance <= 0) return false;
+  const horizontalDistance = dx * cosYaw + dz * -sinYaw;
+  const verticalDistance = dx * (sinYaw * sinPitch)
+    + dy * cosPitch
+    + dz * (cosYaw * sinPitch);
+  const verticalLimit = forwardDistance * Math.tan(verticalFovRadians / 2);
+  const horizontalLimit = verticalLimit * Math.max(aspect, 0.01);
+  return Math.abs(horizontalDistance) <= horizontalLimit
+    && Math.abs(verticalDistance) <= verticalLimit;
 }
 
 export const STEP_ORDER = [
@@ -189,6 +231,12 @@ interface GameQaDriver {
   canActorsSee(fromActorId: EntityId, toActorId: EntityId): boolean;
   isActorSupported(actorId: EntityId): boolean;
   actorCommand(actorId: EntityId): PlayerCommand;
+  actorWeaponState(actorId: EntityId, slot?: 1 | 2): WeaponState;
+  setActorWeaponState(
+    actorId: EntityId,
+    patch: Partial<Pick<WeaponState, 'magazine' | 'reserve' | 'reloadEndsAt'>>,
+    slot?: 1 | 2,
+  ): void;
   useLiveCommands(): void;
   restart(): void;
 }
@@ -413,7 +461,14 @@ export class Game {
   private updateWeapons(dt: number): void {
     this.humanWeaponFired = false;
     for (const actor of this.actors.values()) {
-      const command = this.commands.get(actor.state.id) ?? idleCommand();
+      let command = this.commands.get(actor.state.id) ?? idleCommand();
+      if (!actor.definition.human) {
+        const selected = command.slot === 2
+          ? actor.state.sidearm
+          : actor.state.primary;
+        command = applyBotAmmoIntent(command, selected);
+        this.commands.set(actor.state.id, command);
+      }
       const events = this.weaponSystem.update(actor.state.id, command, {
         origin: this.eyePosition(actor.state.position),
       }, dt);
@@ -582,10 +637,40 @@ export class Game {
   private renderFrame(): void {
     const human = this.actors.get('attack-human')?.state;
     if (!human) return;
+    const cameraPose = selectCameraPose(human);
     this.currentSnapshot = { ...this.currentSnapshot, paused: this.paused };
     this.hud.render(this.currentSnapshot);
     this.updateFirstPersonWeapon(0);
-    this.world.render(selectCameraPose(human));
+    this.updateBotHealthBars(cameraPose, human.id);
+    this.world.render(cameraPose);
+  }
+
+  private updateBotHealthBars(cameraPose: CameraPose, viewerId: EntityId): void {
+    const aspect = this.canvas.clientWidth / Math.max(this.canvas.clientHeight, 1);
+    for (const { definition, state } of this.actors.values()) {
+      if (definition.human) continue;
+      const target = { x: state.position.x, y: state.position.y + 1.15, z: state.position.z };
+      const direction = {
+        x: target.x - cameraPose.position.x,
+        y: target.y - cameraPose.position.y,
+        z: target.z - cameraPose.position.z,
+      };
+      const distance = Math.hypot(direction.x, direction.y, direction.z);
+      const insideView = isPointWithinCameraView(cameraPose, target, aspect);
+      const hit = insideView && distance > 0.01
+        ? this.world.raycast(
+          cameraPose.position,
+          direction,
+          Math.max(0, distance - 0.05),
+          viewerId,
+        )
+        : null;
+      this.world.updatePlayerHealthBar(
+        state.id,
+        state.health,
+        state.alive && insideView && (hit === null || hit.entityId === state.id),
+      );
+    }
   }
 
   private eyePosition(position: Vec3): Vec3 {
@@ -741,6 +826,16 @@ export class Game {
       actorCommand(actorId) {
         if (!game.actors.has(actorId)) throw new Error(`Unknown QA actor: ${actorId}`);
         return { ...(game.commands.get(actorId) ?? idleCommand()) };
+      },
+      actorWeaponState(actorId, slot = 1) {
+        const actor = game.actors.get(actorId)?.state;
+        if (!actor) throw new Error(`Unknown QA actor: ${actorId}`);
+        return { ...(slot === 2 ? actor.sidearm : actor.primary) };
+      },
+      setActorWeaponState(actorId, patch, slot = 1) {
+        const actor = game.actors.get(actorId)?.state;
+        if (!actor) throw new Error(`Unknown QA actor: ${actorId}`);
+        Object.assign(slot === 2 ? actor.sidearm : actor.primary, patch);
       },
       useLiveCommands() {
         game.qaCommands = null;

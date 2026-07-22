@@ -1,8 +1,11 @@
 import { expect, it } from 'vitest';
+import { idleCommand } from '../src/core/types';
 import {
+  applyBotAmmoIntent,
   calculateTracerOrigin,
   cloneGameSnapshot,
   createGameRoster,
+  isPointWithinCameraView,
   selectCameraPose,
   selectRoundBombCarrier,
   selectViewActor,
@@ -10,6 +13,7 @@ import {
   STEP_ORDER,
   type GameSnapshot,
 } from '../src/game';
+import { createWeaponState } from '../src/weapons/weapon-system';
 
 const actor = (
   id: string,
@@ -17,6 +21,38 @@ const actor = (
   position: { x: number; y: number; z: number },
   alive = true,
 ) => ({ id, team, position, health: alive ? 100 : 0, alive });
+
+it('forces an empty bot weapon to stop firing and spend real reload time', () => {
+  const weapon = createWeaponState('vanguard-rifle');
+  weapon.magazine = 0;
+  const firing = { ...idleCommand(), fire: true };
+
+  expect(applyBotAmmoIntent(firing, weapon)).toMatchObject({
+    fire: false,
+    reload: true,
+  });
+
+  weapon.reserve = 0;
+  expect(applyBotAmmoIntent(firing, weapon)).toMatchObject({
+    fire: false,
+    reload: false,
+  });
+});
+
+it('shows world labels only for points inside the current camera view', () => {
+  const pose = {
+    position: { x: 0, y: 1.65, z: 0 },
+    yaw: 0,
+    pitch: 0,
+  };
+
+  expect(isPointWithinCameraView(pose, { x: 0, y: 2, z: -10 }, 16 / 9)).toBe(true);
+  expect(isPointWithinCameraView(pose, { x: 0, y: 2, z: 10 }, 16 / 9)).toBe(false);
+  expect(isPointWithinCameraView(pose, { x: 20, y: 2, z: -10 }, 16 / 9)).toBe(false);
+  expect(isPointWithinCameraView({ ...pose, position: { x: 0, y: 72, z: 0 }, pitch: -Math.PI / 2 }, {
+    x: 0, y: 1, z: 0,
+  }, 16 / 9)).toBe(true);
+});
 
 it('composes one fixed step in the required deterministic order', () => {
   expect(STEP_ORDER).toEqual([

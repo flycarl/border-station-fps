@@ -1,12 +1,31 @@
 import { expect, it } from 'vitest';
 import { createBorderStationGraybox } from '../../src/world/border-station-graybox';
 import {
+  createPlayerHealthBar,
   createBombSiteMarkerGeometry,
   createSolidRampGeometry,
+  updatePlayerHealthBarVisual,
   WorldRuntime,
 } from '../../src/world/world-runtime';
 
 const mainRamp = createBorderStationGraybox().solids.find((solid) => solid.id === 'ramp-main')!;
+
+it('scales and colors a visible world-space bot health bar from authoritative health', () => {
+  const bar = createPlayerHealthBar();
+  try {
+    updatePlayerHealthBarVisual(bar, 42, true);
+
+    expect(bar.group.visible).toBe(true);
+    expect(bar.fill.scale.x).toBeCloseTo(0.42);
+    expect(bar.fill.position.x).toBeCloseTo(-0.261);
+    expect(bar.fillMaterial.color.getHex()).toBe(0xffc247);
+
+    updatePlayerHealthBarVisual(bar, 0, true);
+    expect(bar.group.visible).toBe(false);
+  } finally {
+    bar.dispose();
+  }
+});
 
 it('builds each ramp as a closed ground-to-slope triangular prism', () => {
   const geometry = createSolidRampGeometry(mainRamp);
