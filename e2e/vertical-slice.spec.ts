@@ -132,6 +132,32 @@ test('expanded ramps are traversable through real Rapier movement', async ({ pag
   }
 });
 
+test('solid back walls keep the player on both team-side ends of the map', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
+  const boundaries = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const actor = () => qa.state.actors.find(({ id }) => id === 'attack-human')!;
+
+    qa.place('attack-human', { x: 0, y: 1, z: 44 });
+    qa.command('attack-human', { moveZ: -1, yaw: Math.PI });
+    qa.advance(120);
+    const attackEnd = { ...actor().position };
+
+    qa.place('attack-human', { x: 0, y: 1, z: -44 });
+    qa.command('attack-human', { moveZ: -1, yaw: 0 });
+    qa.advance(120);
+    const defenseEnd = { ...actor().position };
+    return { attackEnd, defenseEnd };
+  });
+
+  expect(boundaries.attackEnd.z).toBeLessThan(46.2);
+  expect(boundaries.attackEnd.y).toBeGreaterThan(0.7);
+  expect(boundaries.defenseEnd.z).toBeGreaterThan(-46.2);
+  expect(boundaries.defenseEnd.y).toBeGreaterThan(0.7);
+});
+
 test('L-shaped corner is traversable through its right entry and lower exit', async ({ page }, testInfo) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));

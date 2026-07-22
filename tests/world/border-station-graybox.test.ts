@@ -75,6 +75,26 @@ it('grounds every wall and cover while preserving their authored tops', () => {
   expect(backCover.center.y + backCover.size.y / 2).toBeCloseTo(3.8);
 });
 
+it('closes both team-side ends with grounded full-width boundary walls', () => {
+  const map = createBorderStationGraybox();
+  const floor = map.solids.find(({ id }) => id === 'floor')!;
+  const attackBack = map.solids.find(({ id }) => id === 'wall-attack-back');
+  const defenseBack = map.solids.find(({ id }) => id === 'wall-defense-back');
+
+  expect(attackBack).toMatchObject({
+    center: { x: floor.center.x, y: 2.5, z: floor.center.z + floor.size.z / 2 },
+    size: { x: floor.size.x, y: 5, z: 1 },
+    kind: 'wall',
+  });
+  expect(defenseBack).toMatchObject({
+    center: { x: floor.center.x, y: 2.5, z: floor.center.z - floor.size.z / 2 },
+    size: { x: floor.size.x, y: 5, z: 1 },
+    kind: 'wall',
+  });
+  expect(attackBack!.center.y - attackBack!.size.y / 2).toBe(0);
+  expect(defenseBack!.center.y - defenseBack!.size.y / 2).toBe(0);
+});
+
 it('faces attack spawns toward the site and defense spawns toward attackers', () => {
   const map = createBorderStationGraybox();
 

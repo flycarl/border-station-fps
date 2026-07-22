@@ -125,6 +125,20 @@ export function createBorderStationGraybox(): GrayboxDefinition {
         yaw: 0,
         kind: 'wall',
       },
+      {
+        id: 'wall-attack-back',
+        center: { x: 0, y: 2.5, z: 47 },
+        size: { x: 34, y: 5, z: 1 },
+        yaw: 0,
+        kind: 'wall',
+      },
+      {
+        id: 'wall-defense-back',
+        center: { x: 0, y: 2.5, z: -47 },
+        size: { x: 34, y: 5, z: 1 },
+        yaw: 0,
+        kind: 'wall',
+      },
     ],
     spawns: [
       { id: 'a1', team: 'attack', position: { x: -4, y: 1, z: 39 }, yaw: 0 },
