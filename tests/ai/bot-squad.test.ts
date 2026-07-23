@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { BotSquad, type BotActorView, type BombView } from '../../src/ai/bot-squad';
+import {
+  assignRoundRouteVariants,
+  BotSquad,
+  type BotActorView,
+  type BombView,
+} from '../../src/ai/bot-squad';
 import { NavGraph } from '../../src/ai/nav-graph';
 import { idleCommand } from '../../src/core/types';
 
@@ -31,6 +36,26 @@ const bomb = (overrides: Partial<BombView> = {}): BombView => ({
 it('requires exactly five unique bot ids', () => {
   expect(() => new BotSquad(ids.slice(0, 4))).toThrow('BotSquad requires exactly five bot ids');
   expect(() => new BotSquad([...ids.slice(0, 4), ids[0]!])).toThrow('BotSquad bot ids must be unique');
+});
+
+it('gives every bot all three opening routes across successive rounds', () => {
+  const routesByBot = new Map(ids.map((id) => [id, new Set<string>()]));
+
+  for (let round = 1; round <= 9; round++) {
+    const assignments = assignRoundRouteVariants(ids, round);
+    expect(new Set(ids.slice(0, 2).map((id) => assignments.get(id))).size).toBe(2);
+    expect(new Set(ids.slice(2).map((id) => assignments.get(id))).size).toBe(3);
+    for (const id of ids) routesByBot.get(id)!.add(assignments.get(id)!);
+  }
+
+  for (const routes of routesByBot.values()) {
+    expect(routes).toEqual(new Set(['left', 'center', 'right']));
+  }
+});
+
+it('repeats the same route assignments when the same round is replayed', () => {
+  expect([...assignRoundRouteVariants(ids, 7)])
+    .toEqual([...assignRoundRouteVariants(ids, 7)]);
 });
 
 it('returns one complete command for each of its five actors', () => {

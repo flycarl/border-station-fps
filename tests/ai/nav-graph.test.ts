@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { NavGraph } from '../../src/ai/nav-graph';
+import { createBorderStationGraybox } from '../../src/world/border-station-graybox';
 
 it('finds the route from attack spawn to site', () => {
   const graph = new NavGraph([
@@ -29,6 +30,18 @@ it('rejects unknown start and goal ids', () => {
 
   expect(() => graph.findPath('missing', 'known')).toThrow('Unknown nav node: missing');
   expect(() => graph.findPath('known', 'missing')).toThrow('Unknown nav node: missing');
+});
+
+it('authors left, center, and right attack approaches into the map graph', () => {
+  const graph = new NavGraph(createBorderStationGraybox().navNodes);
+
+  expect(graph.findPath('corner-turn', 'mid-left')).toContain('mid-left');
+  expect(graph.findPath('corner-turn', 'mid-center')).toContain('mid-center');
+  expect(graph.findPath('corner-turn', 'mid-right')).toContain('mid-right');
+  expect(graph.findPath('mid-center', 'center-split')).toEqual([
+    'mid-center',
+    'center-split',
+  ]);
 });
 
 it('rejects an unknown neighbor referenced by a visited node', () => {

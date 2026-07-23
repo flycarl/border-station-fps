@@ -38,7 +38,36 @@ interface OwnedBot {
   id: EntityId;
   team: Team;
   laneOffset: number;
+  routeVariant: RouteVariant;
+  routeProgress: number;
   controller: BotController;
+}
+
+export type RouteVariant = 'left' | 'center' | 'right';
+
+const ROUTE_VARIANTS = ['left', 'center', 'right'] as const;
+const ATTACK_ROUTE_CHECKPOINTS: Record<RouteVariant, readonly string[]> = {
+  left: ['mid-left', 'site-left'],
+  center: ['mid-center', 'center-split', 'site-left'],
+  right: ['mid-right', 'site-right'],
+};
+const DEFENSE_ROUTE_NODES: Record<RouteVariant, readonly [string, string]> = {
+  left: ['defense-left', 'site-left'],
+  center: ['defense-center', 'site'],
+  right: ['defense-right', 'site-right'],
+};
+
+export function assignRoundRouteVariants(
+  botIds: EntityId[],
+  round: number,
+): Map<EntityId, RouteVariant> {
+  const assignments = new Map<EntityId, RouteVariant>();
+  const roundOffset = Math.max(0, Math.floor(round) - 1) % ROUTE_VARIANTS.length;
+  botIds.forEach((id, index) => {
+    const teamIndex = index < 2 ? index : index - 2;
+    assignments.set(id, ROUTE_VARIANTS[(roundOffset + teamIndex) % 3]!);
+  });
+  return assignments;
 }
 
 const ATTACK_LANE_OFFSETS = [0, 1.5] as const;
@@ -158,6 +187,8 @@ export class BotSquad {
         laneOffset: team === 'attack'
           ? ATTACK_LANE_OFFSETS[teamIndex]!
           : DEFENSE_LANE_OFFSETS[teamIndex]!,
+        routeVariant: ROUTE_VARIANTS[teamIndex]!,
+        routeProgress: 0,
         controller: new BotController(id, team, index),
       };
     });
@@ -202,7 +233,13 @@ export class BotSquad {
 
   reset(round: number): void {
     this.round = round;
+    const assignments = assignRoundRouteVariants(
+      this.bots.map(({ id }) => id),
+      round,
+    );
     this.bots.forEach((bot, index) => {
+      bot.routeVariant = assignments.get(bot.id)!;
+      bot.routeProgress = 0;
       bot.controller.reset(round * 100 + index);
     });
   }
@@ -275,19 +312,7 @@ export class BotSquad {
     }
 
     if (bot.team === 'defense') {
-      const defenderIndex = this.bots
-        .filter(({ team }) => team === 'defense')
-        .findIndex(({ id }) => id === bot.id);
-      const openingExitId = [
-        'defense-left',
-        'defense-center',
-        'defense-right',
-      ][defenderIndex];
-      const openingFrontId = [
-        'site-left',
-        'site',
-        'site-right',
-      ][defenderIndex];
+      const [openingExitId, openingFrontId] = DEFENSE_ROUTE_NODES[bot.routeVariant];
       const nearestNodeId = context.nav.nearest(actor.position).id;
       const openingTargetId = nearestNodeId === 'defense'
         ? openingExitId
@@ -322,6 +347,15 @@ export class BotSquad {
       return context.nav.nodes.find(({ id }) => id === anchorId)?.position
         ?? site.position;
     }
+    const routeCheckpoint = this.attackRouteCheckpoint(bot, actor, context.nav);
+    if (routeCheckpoint) {
+      return routeToward(
+        context.nav,
+        actor.position,
+        routeCheckpoint,
+        bot.laneOffset,
+      );
+    }
     const target = routeToward(
       context.nav,
       actor.position,
@@ -331,5 +365,23 @@ export class BotSquad {
     return objective === 'plant' && planarDistance(target, site.position) < 0.01
       ? { ...target, y: actor.position.y }
       : target;
+  }
+
+  private attackRouteCheckpoint(
+    bot: OwnedBot,
+    actor: BotActorView,
+    nav: NavGraph,
+  ): Vec3 | null {
+    const checkpoints = ATTACK_ROUTE_CHECKPOINTS[bot.routeVariant];
+    while (bot.routeProgress < checkpoints.length) {
+      const checkpointId = checkpoints[bot.routeProgress]!;
+      const checkpoint = nav.nodes.find(({ id }) => id === checkpointId);
+      if (!checkpoint) return null;
+      if (planarDistance(actor.position, checkpoint.position) > 2.6) {
+        return checkpoint.position;
+      }
+      bot.routeProgress++;
+    }
+    return null;
   }
 }

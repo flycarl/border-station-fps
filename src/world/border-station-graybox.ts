@@ -168,13 +168,25 @@ export function createBorderStationGraybox(): GrayboxDefinition {
       {
         id: 'corner-turn',
         position: { x: 11, y: 1, z: 12 },
-        neighbors: ['corner-entry', 'mid-left', 'mid-right'],
+        neighbors: ['corner-entry', 'mid-left', 'mid-center', 'mid-right'],
         tags: ['corner'],
       },
       {
         id: 'mid-left',
         position: { x: -8, y: 1, z: 13 },
         neighbors: ['corner-turn', 'site-left'],
+        tags: ['cover'],
+      },
+      {
+        id: 'mid-center',
+        position: { x: 3, y: 1, z: 11 },
+        neighbors: ['corner-turn', 'center-split'],
+        tags: ['cover'],
+      },
+      {
+        id: 'center-split',
+        position: { x: 3.8, y: 1, z: -8 },
+        neighbors: ['mid-center', 'site-left', 'site-right'],
         tags: ['cover'],
       },
       {
@@ -186,13 +198,13 @@ export function createBorderStationGraybox(): GrayboxDefinition {
       {
         id: 'site-left',
         position: { x: -5, y: 2.4, z: -22 },
-        neighbors: ['mid-left', 'site', 'defense-left'],
+        neighbors: ['mid-left', 'center-split', 'site', 'defense-left'],
         tags: ['ramp'],
       },
       {
         id: 'site-right',
         position: { x: 8, y: 2.4, z: -22 },
-        neighbors: ['mid-right', 'site', 'defense-right'],
+        neighbors: ['mid-right', 'center-split', 'site', 'defense-right'],
         tags: ['ramp'],
       },
       {
