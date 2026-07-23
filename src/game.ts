@@ -654,6 +654,9 @@ export class Game {
     this.currentSnapshot = { ...this.currentSnapshot, paused: this.paused };
     this.hud.render(this.currentSnapshot);
     this.updateFirstPersonWeapon(0);
+    for (const { state } of this.actors.values()) {
+      this.world.setPlayerFacing(state.id, state.yaw);
+    }
     this.updateBotHealthBars(cameraPose, human.id);
     this.world.render(cameraPose);
   }

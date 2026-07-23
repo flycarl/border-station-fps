@@ -21,11 +21,12 @@ export interface BulletTracerDiagnostics {
 
 export class BulletTracerSystem {
   private readonly active: ActiveTracer[] = [];
-  private readonly headGeometry = new THREE.SphereGeometry(0.075, 8, 6);
-  private readonly headMaterials: Record<Team, THREE.MeshBasicMaterial> = {
-    attack: new THREE.MeshBasicMaterial({ color: 0xffb34f, transparent: true, opacity: 0.95 }),
-    defense: new THREE.MeshBasicMaterial({ color: 0x62e5ff, transparent: true, opacity: 0.95 }),
-  };
+  private readonly headGeometry = new THREE.BoxGeometry(0.04, 0.04, 0.04);
+  private readonly headMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.98,
+  });
   private readonly trailMaterials: Record<Team, THREE.LineBasicMaterial> = {
     attack: new THREE.LineBasicMaterial({ color: 0xffc46f, transparent: true, opacity: 0.9 }),
     defense: new THREE.LineBasicMaterial({ color: 0x8deeff, transparent: true, opacity: 0.9 }),
@@ -41,7 +42,7 @@ export class BulletTracerSystem {
     const trailGeometry = new THREE.BufferGeometry();
     trailGeometry.setAttribute('position', new THREE.Float32BufferAttribute(6, 3));
     const trail = new THREE.Line(trailGeometry, this.trailMaterials[team]);
-    const head = new THREE.Mesh(this.headGeometry, this.headMaterials[team]);
+    const head = new THREE.Mesh(this.headGeometry, this.headMaterial);
     trail.frustumCulled = false;
     head.frustumCulled = false;
     group.add(trail, head);
@@ -93,8 +94,7 @@ export class BulletTracerSystem {
     }
     this.active.length = 0;
     this.headGeometry.dispose();
-    this.headMaterials.attack.dispose();
-    this.headMaterials.defense.dispose();
+    this.headMaterial.dispose();
     this.trailMaterials.attack.dispose();
     this.trailMaterials.defense.dispose();
   }

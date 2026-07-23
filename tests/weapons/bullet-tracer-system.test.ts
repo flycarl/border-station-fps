@@ -20,6 +20,11 @@ it('moves a visible team-colored bullet tracer and expires it', () => {
   expect((scene.children[0] as THREE.Group).children.some((child) => (
     child as THREE.Line
   ).isLine)).toBe(true);
+  const head = (scene.children[0] as THREE.Group).children.find((child) => (
+    child as THREE.Mesh
+  ).isMesh) as THREE.Mesh<THREE.BoxGeometry, THREE.MeshBasicMaterial>;
+  expect(head.geometry.type).toBe('BoxGeometry');
+  expect(head.material.color.getHex()).toBe(0xffffff);
 
   tracers.update(0.06);
   expect(tracers.diagnostics().bullets[0]?.progress).toBeCloseTo(0.5, 2);

@@ -13,6 +13,7 @@ import {
   createBorderStationGraybox,
   type SolidDef,
 } from './border-station-graybox';
+import { createPixelCharacter, type PixelCharacter } from './pixel-character';
 
 export interface CameraPose {
   position: Vec3;
@@ -225,7 +226,7 @@ export class WorldRuntime {
   private readonly disposableMaterials: THREE.Material[] = [];
   private readonly playerBodies = new Map<EntityId, RAPIER.RigidBody>();
   private readonly inactivePlayers = new Set<EntityId>();
-  private readonly playerMeshes = new Map<EntityId, THREE.Mesh>();
+  private readonly playerMeshes = new Map<EntityId, PixelCharacter>();
   private readonly playerHealthBars = new Map<EntityId, PlayerHealthBar>();
   private readonly supportColliderHandles = new Set<number>();
   private bombSiteMarker: THREE.Group | null = null;
@@ -295,17 +296,13 @@ export class WorldRuntime {
     this.inactivePlayers.delete(entityId);
 
     if (this.scene) {
-      const geometry = new THREE.CapsuleGeometry(PLAYER_RADIUS, PLAYER_HALF_HEIGHT * 2, 4, 8);
-      const material = new THREE.MeshStandardMaterial({
-        color: entityId.startsWith('attack') ? 0xd89042 : 0x55a7c4,
-        roughness: 0.72,
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.castShadow = true;
-      mesh.visible = entityId !== 'attack-human';
-      mesh.position.set(position.x, position.y, position.z);
-      this.scene.add(mesh);
-      this.playerMeshes.set(entityId, mesh);
+      const character = createPixelCharacter(
+        entityId.startsWith('attack') ? 'attack' : 'defense',
+      );
+      character.group.visible = entityId !== 'attack-human';
+      character.group.position.set(position.x, position.y, position.z);
+      this.scene.add(character.group);
+      this.playerMeshes.set(entityId, character);
       if (entityId !== 'attack-human') {
         const healthBar = createPlayerHealthBar();
         this.scene.add(healthBar.group);
@@ -324,13 +321,7 @@ export class WorldRuntime {
     this.physicsWorld.removeRigidBody(body);
     this.playerBodies.delete(entityId);
     this.inactivePlayers.delete(entityId);
-    const mesh = this.playerMeshes.get(entityId);
-    if (mesh) {
-      mesh.removeFromParent();
-      mesh.geometry.dispose();
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const material of materials) material.dispose();
-    }
+    this.playerMeshes.get(entityId)?.dispose();
     this.playerMeshes.delete(entityId);
     this.playerHealthBars.get(entityId)?.dispose();
     this.playerHealthBars.delete(entityId);
@@ -355,7 +346,7 @@ export class WorldRuntime {
       else this.colliderEntityIds.delete(collider.handle);
     }
     const mesh = this.playerMeshes.get(entityId);
-    if (mesh) mesh.visible = active && entityId !== 'attack-human';
+    if (mesh) mesh.group.visible = active && entityId !== 'attack-human';
     if (!active) {
       const healthBar = this.playerHealthBars.get(entityId);
       if (healthBar) healthBar.group.visible = false;
@@ -372,6 +363,11 @@ export class WorldRuntime {
     );
   }
 
+  setPlayerFacing(entityId: EntityId, yaw: number): void {
+    const character = this.playerMeshes.get(entityId);
+    if (character) character.group.rotation.y = yaw;
+  }
+
   playerStatus(entityId: EntityId): PlayerWorldStatus | null {
     const body = this.playerBodies.get(entityId);
     if (!body) return null;
@@ -384,7 +380,7 @@ export class WorldRuntime {
     return {
       active: !this.inactivePlayers.has(entityId),
       raycastRegistered,
-      meshVisible: this.playerMeshes.get(entityId)?.visible ?? false,
+      meshVisible: this.playerMeshes.get(entityId)?.group.visible ?? false,
       healthBarVisible: this.playerHealthBars.get(entityId)?.group.visible ?? false,
       healthFraction: this.playerHealthBars.get(entityId)?.healthFraction ?? 0,
     };
@@ -465,11 +461,11 @@ export class WorldRuntime {
   render(cameraPose: CameraPose): void {
     if (!this.camera || !this.renderer || !this.scene) return;
     applyCameraPose(this.camera, cameraPose);
-    for (const [entityId, mesh] of this.playerMeshes) {
+    for (const [entityId, character] of this.playerMeshes) {
       const body = this.playerBodies.get(entityId);
       if (!body) continue;
       const position = body.translation();
-      mesh.position.set(position.x, position.y, position.z);
+      character.group.position.set(position.x, position.y, position.z);
       const healthBar = this.playerHealthBars.get(entityId);
       if (healthBar && this.camera) {
         healthBar.group.position.set(position.x, position.y + 1.15, position.z);
