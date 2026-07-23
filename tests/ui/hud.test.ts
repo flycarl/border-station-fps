@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import {
+  buildNearSoundWavePath,
   buildSoundWavePath,
   Hud,
   projectRadarPosition,
@@ -78,6 +79,7 @@ it('waves toward front sounds and points toward sounds behind the player', () =>
     id: 'enemy-front',
     direction: 0.65,
     intensity: 0.9,
+    near: true,
     behind: false,
     arrowAngle: 0,
     phase: 0.7,
@@ -85,8 +87,11 @@ it('waves toward front sounds and points toward sounds behind the player', () =>
   hud.render(snapshot({ soundCues: [front] }));
 
   const path = root.querySelector('.hud__sound-wave')?.getAttribute('d');
+  const nearPath = root.querySelector('.hud__sound-wave-near')?.getAttribute('d');
   expect(path).toBe(buildSoundWavePath([front]));
   expect(path).not.toBe(buildSoundWavePath([]));
+  expect(nearPath).toBe(buildNearSoundWavePath([front]));
+  expect(nearPath).not.toBe('');
   expect(root.querySelector<HTMLElement>('.hud__sound-arrow')?.hidden).toBe(true);
 
   hud.render(snapshot({
@@ -100,6 +105,26 @@ it('waves toward front sounds and points toward sounds behind the player', () =>
   const arrow = root.querySelector<HTMLElement>('.hud__sound-arrow');
   expect(arrow?.hidden).toBe(false);
   expect(arrow?.style.getPropertyValue('--sound-angle')).toBe('135deg');
+});
+
+it('keeps ordinary sound waves yellow-only and reserves red segments for nearby sounds', () => {
+  const root = document.createElement('div');
+  const hud = new Hud(root);
+  const distant = {
+    id: 'distant-footstep',
+    direction: -0.4,
+    intensity: 0.35,
+    near: false,
+    behind: false,
+    arrowAngle: 0,
+    phase: 0.4,
+  };
+
+  hud.render(snapshot({ soundCues: [distant] }));
+
+  expect(root.querySelector('.hud__sound-wave')?.getAttribute('d'))
+    .not.toBe(buildSoundWavePath([]));
+  expect(root.querySelector('.hud__sound-wave-near')?.getAttribute('d')).toBe('');
 });
 
 it('projects and clamps world coordinates into a north-up radar', () => {

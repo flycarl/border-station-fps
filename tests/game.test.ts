@@ -169,7 +169,7 @@ it('deep-clones radar state so diagnostics cannot mutate the authoritative snaps
     bombState: 'carried', round: 1, paused: false,
     soundCues: [{
       id: 'defense-bot-1', direction: -0.4, intensity: 0.8,
-      behind: false, arrowAngle: -24, phase: 0.5,
+      near: true, behind: false, arrowAngle: -24, phase: 0.5,
     }],
     radar: {
       viewerTeam: 'attack',

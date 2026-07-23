@@ -63,6 +63,7 @@ export class SoundAwarenessSystem {
           id: sound.sourceId,
           direction: Math.max(-1, Math.min(1, -Math.sin(relative))),
           intensity,
+          near: distance <= 7.5,
           behind: Math.abs(relative) > Math.PI / 2,
           arrowAngle: -relative * 180 / Math.PI,
           phase: ageFraction * Math.PI * 5,

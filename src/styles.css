@@ -91,6 +91,14 @@ button { pointer-events: auto; font: inherit; }
   stroke-linejoin: round;
   transition: opacity 90ms linear;
 }
+.hud__sound-wave-near {
+  fill: none;
+  stroke: #ff4d43;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgb(255 47 42 / 88%));
+}
 .hud__sound-arrow {
   position: absolute;
   left: calc(50% - 12px);

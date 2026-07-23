@@ -19,6 +19,7 @@ export interface SoundDirectionCue {
   id: string;
   direction: number;
   intensity: number;
+  near: boolean;
   behind: boolean;
   arrowAngle: number;
   phase: number;
@@ -48,6 +49,23 @@ export interface RadarSnapshot {
   contacts: RadarContact[];
 }
 
+function soundWaveOffset(
+  cues: readonly SoundDirectionCue[],
+  x: number,
+  width: number,
+  height: number,
+): number {
+  let offset = 0;
+  for (const cue of cues) {
+    const centerX = (Math.max(-1, Math.min(1, cue.direction)) + 1) * width / 2;
+    const spread = width * 0.085;
+    const delta = x - centerX;
+    const envelope = Math.exp(-(delta * delta) / (2 * spread * spread));
+    offset += Math.sin(delta * 0.19 + cue.phase) * envelope * cue.intensity * height * 0.34;
+  }
+  return offset;
+}
+
 export function buildSoundWavePath(
   cues: readonly SoundDirectionCue[],
   width = 360,
@@ -58,17 +76,34 @@ export function buildSoundWavePath(
   const points: string[] = [];
   for (let index = 0; index <= 72; index++) {
     const x = width * index / 72;
-    let offset = 0;
-    for (const cue of frontCues) {
-      const centerX = (Math.max(-1, Math.min(1, cue.direction)) + 1) * width / 2;
-      const spread = width * 0.085;
-      const delta = x - centerX;
-      const envelope = Math.exp(-(delta * delta) / (2 * spread * spread));
-      offset += Math.sin(delta * 0.19 + cue.phase) * envelope * cue.intensity * height * 0.34;
-    }
+    const offset = soundWaveOffset(frontCues, x, width, height);
     points.push(`${x.toFixed(1)},${(centerY + offset).toFixed(1)}`);
   }
   return `M ${points.join(' L ')}`;
+}
+
+export function buildNearSoundWavePath(
+  cues: readonly SoundDirectionCue[],
+  width = 360,
+  height = 42,
+): string {
+  const centerY = height / 2;
+  const nearCues = cues.filter(({ behind, near }) => (
+    !behind && near
+  ));
+  return nearCues.map((cue) => {
+    const centerX = (Math.max(-1, Math.min(1, cue.direction)) + 1) * width / 2;
+    const halfSegment = width * 0.13;
+    const start = Math.max(0, centerX - halfSegment);
+    const end = Math.min(width, centerX + halfSegment);
+    const points: string[] = [];
+    for (let index = 0; index <= 24; index++) {
+      const x = start + (end - start) * index / 24;
+      const offset = soundWaveOffset([cue], x, width, height);
+      points.push(`${x.toFixed(1)},${(centerY + offset).toFixed(1)}`);
+    }
+    return `M ${points.join(' L ')}`;
+  }).join(' ');
 }
 
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
@@ -128,6 +163,7 @@ export class Hud {
   private readonly radarSite: HTMLElement;
   private readonly radarContacts = new Map<string, HTMLElement>();
   private readonly soundWave: SVGPathElement;
+  private readonly nearSoundWave: SVGPathElement;
   private readonly soundArrow: HTMLElement;
   private lastStatusKey = '';
 
@@ -153,6 +189,7 @@ export class Hud {
         <svg viewBox="0 0 360 42" preserveAspectRatio="none" aria-hidden="true">
           <path class="hud__sound-baseline" d="M 0,21 L 360,21"></path>
           <path class="hud__sound-wave" d="M 0,21 L 360,21"></path>
+          <path class="hud__sound-wave-near" d=""></path>
         </svg>
         <span class="hud__sound-arrow" aria-hidden="true">▲</span>
       </section>
@@ -187,6 +224,9 @@ export class Hud {
     const soundWave = this.element.querySelector<SVGPathElement>('.hud__sound-wave');
     if (!soundWave) throw new Error('HUD element missing: .hud__sound-wave');
     this.soundWave = soundWave;
+    const nearSoundWave = this.element.querySelector<SVGPathElement>('.hud__sound-wave-near');
+    if (!nearSoundWave) throw new Error('HUD element missing: .hud__sound-wave-near');
+    this.nearSoundWave = nearSoundWave;
     this.soundArrow = this.require('.hud__sound-arrow');
     root.append(this.element);
   }
@@ -254,6 +294,7 @@ export class Hud {
 
   private renderSoundDirection(cues: readonly SoundDirectionCue[]): void {
     this.soundWave.setAttribute('d', buildSoundWavePath(cues));
+    this.nearSoundWave.setAttribute('d', buildNearSoundWavePath(cues));
     const frontIntensity = cues
       .filter(({ behind }) => !behind)
       .reduce((maximum, cue) => Math.max(maximum, cue.intensity), 0);

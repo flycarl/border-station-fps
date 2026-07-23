@@ -62,20 +62,79 @@ const ACTIVE_COLLISION_GROUPS = 0xffffffff;
 const INACTIVE_COLLISION_GROUPS = 0;
 const BOMB_SITE_MARKER_Y = 0.012;
 const HEALTH_BAR_WIDTH = 0.9;
+const PLAYER_NAMEPLATE_COLORS: Record<Team, number> = {
+  attack: 0xe69a47,
+  defense: 0x36c7e8,
+};
 
 export interface PlayerHealthBar {
   group: THREE.Group;
   fill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   fillMaterial: THREE.MeshBasicMaterial;
+  nameplateMaterial: THREE.MeshBasicMaterial;
+  team: Team;
   healthFraction: number;
   dispose(): void;
 }
 
-export function createPlayerHealthBar(): PlayerHealthBar {
+function createPlayerNameTexture(label: string): THREE.CanvasTexture | null {
+  if (!label || typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#ffffff';
+  context.font = '900 30px Arial, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(label, canvas.width / 2, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  return texture;
+}
+
+function actorDisplayName(entityId: EntityId, team: Team): string {
+  const number = entityId.match(/(\d+)$/)?.[1] ?? '';
+  return team === 'attack' ? `队友 A${number}` : `敌方 D${number}`;
+}
+
+export function createPlayerHealthBar(
+  team: Team = 'defense',
+  label = '',
+): PlayerHealthBar {
   const group = new THREE.Group();
   group.name = 'player-health-bar';
   group.visible = false;
   group.renderOrder = 20;
+  const nameplateGeometry = new THREE.PlaneGeometry(1.14, 0.25);
+  const nameplateMaterial = new THREE.MeshBasicMaterial({
+    color: PLAYER_NAMEPLATE_COLORS[team],
+    transparent: true,
+    opacity: 0.92,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const nameplate = new THREE.Mesh(nameplateGeometry, nameplateMaterial);
+  nameplate.position.set(0, 0.23, 0);
+  const nameTexture = createPlayerNameTexture(label);
+  const nameGeometry = nameTexture ? new THREE.PlaneGeometry(1.06, 0.22) : null;
+  const nameMaterial = nameTexture
+    ? new THREE.MeshBasicMaterial({
+      map: nameTexture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    })
+    : null;
+  if (nameGeometry && nameMaterial) {
+    const name = new THREE.Mesh(nameGeometry, nameMaterial);
+    name.position.set(0, 0.23, 0.003);
+    group.add(name);
+  }
   const backgroundGeometry = new THREE.PlaneGeometry(0.98, 0.13);
   const backgroundMaterial = new THREE.MeshBasicMaterial({
     color: 0x101820,
@@ -93,14 +152,21 @@ export function createPlayerHealthBar(): PlayerHealthBar {
   });
   const fill = new THREE.Mesh(fillGeometry, fillMaterial);
   fill.position.z = 0.002;
-  group.add(background, fill);
+  group.add(nameplate, background, fill);
   const bar: PlayerHealthBar = {
     group,
     fill,
     fillMaterial,
+    nameplateMaterial,
+    team,
     healthFraction: 1,
     dispose() {
       group.removeFromParent();
+      nameplateGeometry.dispose();
+      nameplateMaterial.dispose();
+      nameGeometry?.dispose();
+      nameMaterial?.dispose();
+      nameTexture?.dispose();
       backgroundGeometry.dispose();
       backgroundMaterial.dispose();
       fillGeometry.dispose();
@@ -303,15 +369,17 @@ export class WorldRuntime {
     this.inactivePlayers.delete(entityId);
 
     if (this.scene) {
-      const character = createPixelCharacter(
-        entityId.startsWith('attack') ? 'attack' : 'defense',
-      );
+      const team: Team = entityId.startsWith('attack') ? 'attack' : 'defense';
+      const character = createPixelCharacter(team);
       character.group.visible = entityId !== 'attack-human';
       character.group.position.set(position.x, position.y, position.z);
       this.scene.add(character.group);
       this.playerMeshes.set(entityId, character);
       if (entityId !== 'attack-human') {
-        const healthBar = createPlayerHealthBar();
+        const healthBar = createPlayerHealthBar(
+          team,
+          actorDisplayName(entityId, team),
+        );
         this.scene.add(healthBar.group);
         this.playerHealthBars.set(entityId, healthBar);
       }

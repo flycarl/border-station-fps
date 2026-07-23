@@ -657,6 +657,47 @@ test('enemy sound cues wave in front, point behind, and never reveal enemies on 
   });
 });
 
+test('enemy footsteps shake the sound line yellow at range and red only when close', async ({ page }, testInfo) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
+  const footsteps = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.place('attack-human', { x: 14, y: 1, z: 10 });
+    qa.place('defense-bot-1', { x: 14, y: 1, z: -2 });
+    qa.command('defense-bot-1', { moveX: -1, yaw: 0 });
+    qa.advance(45);
+    const far = {
+      cues: qa.state.soundCues,
+      yellowPath: document.querySelector('.hud__sound-wave')?.getAttribute('d'),
+      redPath: document.querySelector('.hud__sound-wave-near')?.getAttribute('d'),
+    };
+
+    qa.place('defense-bot-1', { x: 14, y: 1, z: 4 });
+    qa.command('defense-bot-1', { moveX: 0, yaw: 0 });
+    qa.advance(30);
+    qa.command('defense-bot-1', { moveX: -1, yaw: 0 });
+    qa.advance(18);
+    return {
+      far,
+      near: {
+        cues: qa.state.soundCues,
+        yellowPath: document.querySelector('.hud__sound-wave')?.getAttribute('d'),
+        redPath: document.querySelector('.hud__sound-wave-near')?.getAttribute('d'),
+      },
+    };
+  });
+
+  expect(footsteps.far.cues).not.toHaveLength(0);
+  expect(footsteps.far.yellowPath).toContain('L');
+  expect(footsteps.far.redPath).toBe('');
+  expect(footsteps.near.cues.some(({ near }) => near)).toBe(true);
+  expect(footsteps.near.yellowPath).toContain('L');
+  expect(footsteps.near.redPath).toContain('L');
+  await page.locator('.mission-modal').evaluate((element) => element.remove());
+  await page.screenshot({ path: testInfo.outputPath('near-footstep-red-wave-1440x900.png') });
+});
+
 test('new sound line and radar remain inside a narrow viewport', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?qa=1');

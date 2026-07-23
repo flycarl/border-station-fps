@@ -11,7 +11,7 @@ import {
 const mainRamp = createBorderStationGraybox().solids.find((solid) => solid.id === 'ramp-main')!;
 
 it('scales and colors a visible world-space bot health bar from authoritative health', () => {
-  const bar = createPlayerHealthBar();
+  const bar = createPlayerHealthBar('defense');
   try {
     updatePlayerHealthBarVisual(bar, 42, true);
 
@@ -19,11 +19,24 @@ it('scales and colors a visible world-space bot health bar from authoritative he
     expect(bar.fill.scale.x).toBeCloseTo(0.42);
     expect(bar.fill.position.x).toBeCloseTo(-0.261);
     expect(bar.fillMaterial.color.getHex()).toBe(0xffc247);
+    expect(bar.nameplateMaterial.color.getHex()).toBe(0x36c7e8);
 
     updatePlayerHealthBarVisual(bar, 0, true);
     expect(bar.group.visible).toBe(false);
   } finally {
     bar.dispose();
+  }
+});
+
+it('uses distinct team colors for world-space player nameplates', () => {
+  const ally = createPlayerHealthBar('attack');
+  const enemy = createPlayerHealthBar('defense');
+  try {
+    expect(ally.nameplateMaterial.color.getHex()).toBe(0xe69a47);
+    expect(enemy.nameplateMaterial.color.getHex()).toBe(0x36c7e8);
+  } finally {
+    ally.dispose();
+    enemy.dispose();
   }
 });
 

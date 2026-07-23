@@ -736,8 +736,8 @@ export class Game {
         this.soundAwareness.emit({
           sourceId: state.id,
           position: state.position,
-          strength: 0.72,
-          lifetime: 0.78,
+          strength: 0.9,
+          lifetime: 0.9,
           maxDistance: 18,
         });
       }
