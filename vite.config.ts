@@ -1,2 +1,5 @@
 import { defineConfig } from 'vite';
-export default defineConfig({ build: { target: 'es2022', sourcemap: true } });
+export default defineConfig({
+  base: './',
+  build: { target: 'es2022', sourcemap: true },
+});
