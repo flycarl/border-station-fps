@@ -58,7 +58,7 @@ it('requires both the reduced 34-metre range and 105-degree view cone to engage'
 
 // The final seed produces a first PRNG sample of 0.9999999997671694.
 it.each([0, 1, 7, 653_637_408])(
-  'waits at least 0.4 seconds and fires by exactly 0.7 seconds for seed %i',
+  'waits at least 0.45 seconds and fires by exactly 0.8 seconds for seed %i',
   (seed) => {
     const earlyBot = new BotController('bot-early', 'defense', seed);
     const boundaryBot = new BotController('bot-boundary', 'defense', seed);
@@ -67,8 +67,8 @@ it.each([0, 1, 7, 653_637_408])(
       enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
     };
 
-    expect(earlyBot.update({ ...context, dt: 0.399_999 }).fire).toBe(false);
-    expect(boundaryBot.update({ ...context, dt: 0.7 }).fire).toBe(true);
+    expect(earlyBot.update({ ...context, dt: 0.449_999 }).fire).toBe(false);
+    expect(boundaryBot.update({ ...context, dt: 0.8 }).fire).toBe(true);
   },
 );
 
@@ -79,11 +79,11 @@ it('fires again after the precise burst and pause boundaries', () => {
     enemies: [{ id: 'enemy', position: { x: 0, y: 0, z: -10 }, alive: true }],
   };
 
-  expect(bot.update({ ...context, dt: 0.699_999 }).fire).toBe(false);
+  expect(bot.update({ ...context, dt: 0.799_999 }).fire).toBe(false);
   expect(bot.update({ ...context, dt: 0.000_001 }).fire).toBe(true);
-  expect(bot.update({ ...context, dt: 0.319_998 }).fire).toBe(true);
+  expect(bot.update({ ...context, dt: 0.279_998 }).fire).toBe(true);
   expect(bot.update({ ...context, dt: 0.000_002 }).fire).toBe(false);
-  expect(bot.update({ ...context, dt: 0.379_998 }).fire).toBe(false);
+  expect(bot.update({ ...context, dt: 0.479_998 }).fire).toBe(false);
   expect(bot.update({ ...context, dt: 0.000_002 }).fire).toBe(true);
 });
 
@@ -103,7 +103,7 @@ it('keeps pressure with deterministic advance and strafe movement while engaging
   expect(firstCommand).toEqual(secondCommand);
 });
 
-it('keeps wider seeded aim error stable until the 0.35-second resample boundary', () => {
+it('keeps softened seeded aim error stable until the 0.35-second resample boundary', () => {
   const first = new BotController('bot-sustained', 'defense', 17);
   const replay = new BotController('bot-sustained', 'defense', 17);
   const context = {
@@ -124,8 +124,8 @@ it('keeps wider seeded aim error stable until the 0.35-second resample boundary'
   expect(firstSequence[2]!.yaw).not.toBe(firstSequence[1]!.yaw);
   expect(firstSequence[2]!.pitch).not.toBe(firstSequence[1]!.pitch);
   for (const command of firstSequence) {
-    expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.115);
-    expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.080);
+    expect(Math.abs(command.yaw)).toBeLessThanOrEqual(0.125);
+    expect(Math.abs(command.pitch)).toBeLessThanOrEqual(0.088);
   }
   expect(firstSequence.some((command) => Math.abs(command.yaw) > 0.065
     || Math.abs(command.pitch) > 0.040)).toBe(true);
