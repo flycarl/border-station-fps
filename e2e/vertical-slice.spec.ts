@@ -364,6 +364,38 @@ test('every bot leaves spawn with sustained forward progress instead of tremblin
   }
 });
 
+test('attack bots clear the first route junction instead of cycling between nav nodes', async ({ page }) => {
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  const progress = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    const attackers = () => qa.state.actors
+      .filter(({ id }) => id.startsWith('attack-bot'))
+      .map(({ id, alive, position }) => ({ id, alive, position: { ...position } }));
+    qa.useLiveCommands();
+    qa.advance(181 + 8 * 60);
+    const start = attackers();
+    qa.advance(7 * 60);
+    const finish = attackers();
+    return finish.map((actor) => {
+      const origin = start.find(({ id }) => id === actor.id)!;
+      return {
+        id: actor.id,
+        alive: actor.alive,
+        displacement: Math.hypot(
+          actor.position.x - origin.position.x,
+          actor.position.z - origin.position.z,
+        ),
+      };
+    });
+  });
+
+  for (const actor of progress) {
+    expect(actor.alive, `${actor.id} must still be participating`).toBe(true);
+    expect(actor.displacement, `${actor.id} must clear the route junction`).toBeGreaterThan(3);
+  }
+});
+
 test('live bots recover from the site and flank cover traps', async ({ page }) => {
   await page.goto('/?qa=1');
   await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));

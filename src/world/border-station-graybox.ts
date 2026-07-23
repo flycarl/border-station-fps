@@ -173,7 +173,7 @@ export function createBorderStationGraybox(): GrayboxDefinition {
       },
       {
         id: 'mid-left',
-        position: { x: -8, y: 1, z: 13 },
+        position: { x: -11, y: 1, z: 13 },
         neighbors: ['corner-turn', 'site-left'],
         tags: ['cover'],
       },

@@ -47,9 +47,9 @@ export type RouteVariant = 'left' | 'center' | 'right';
 
 const ROUTE_VARIANTS = ['left', 'center', 'right'] as const;
 const ATTACK_ROUTE_CHECKPOINTS: Record<RouteVariant, readonly string[]> = {
-  left: ['mid-left', 'site-left'],
-  center: ['mid-center', 'center-split', 'site-left'],
-  right: ['mid-right', 'site-right'],
+  left: ['corner-entry', 'corner-turn', 'mid-left', 'site-left'],
+  center: ['corner-entry', 'corner-turn', 'mid-center', 'center-split', 'site-left'],
+  right: ['corner-entry', 'corner-turn', 'mid-right', 'site-right'],
 };
 const DEFENSE_ROUTE_NODES: Record<RouteVariant, readonly [string, string]> = {
   left: ['defense-left', 'site-left'],
@@ -349,12 +349,7 @@ export class BotSquad {
     }
     const routeCheckpoint = this.attackRouteCheckpoint(bot, actor, context.nav);
     if (routeCheckpoint) {
-      return routeToward(
-        context.nav,
-        actor.position,
-        routeCheckpoint,
-        bot.laneOffset,
-      );
+      return routeCheckpoint;
     }
     const target = routeToward(
       context.nav,
@@ -377,8 +372,20 @@ export class BotSquad {
       const checkpointId = checkpoints[bot.routeProgress]!;
       const checkpoint = nav.nodes.find(({ id }) => id === checkpointId);
       if (!checkpoint) return null;
-      if (planarDistance(actor.position, checkpoint.position) > 2.6) {
-        return checkpoint.position;
+      const previousId = bot.routeProgress === 0
+        ? 'attack'
+        : checkpoints[bot.routeProgress - 1]!;
+      const previous = nav.nodes.find(({ id }) => id === previousId);
+      const target = previous
+        ? offsetAcrossSegment(
+          checkpoint.position,
+          previous.position,
+          checkpoint.position,
+          bot.laneOffset,
+        )
+        : checkpoint.position;
+      if (planarDistance(actor.position, target) > 2.0) {
+        return target;
       }
       bot.routeProgress++;
     }
