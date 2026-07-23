@@ -580,10 +580,12 @@ test('combat HUD and visible bullet tracers reflect authoritative play state', a
 
   expect(activeShot.tracers).toBeGreaterThan(0);
   expect(activeShot.state).toMatchObject({ attackersAlive: 3, defendersAlive: 3 });
-  expect(activeShot.state.radar.contacts.filter(({ alive }) => alive)).toHaveLength(6);
+  expect(activeShot.state.radar.contacts.filter(({ alive }) => alive)).toHaveLength(3);
+  expect(activeShot.state.radar.contacts.every(({ team }) => team === 'attack')).toBe(true);
   await expect(page.locator('[data-testid="attackers-alive"]')).toHaveText('攻方 3');
   await expect(page.locator('[data-testid="defenders-alive"]')).toHaveText('守方 3');
-  await expect(page.locator('.hud__radar-contact')).toHaveCount(6);
+  await expect(page.locator('.hud__radar-contact')).toHaveCount(3);
+  await expect(page.locator('.hud__radar-contact--defense')).toHaveCount(0);
   await expect(page.locator('.hud__radar-contact--human')).toHaveCount(1);
   await page.locator('.mission-modal').evaluate((element) => {
     (element as HTMLElement).style.display = 'none';
@@ -600,6 +602,89 @@ test('combat HUD and visible bullet tracers reflect authoritative play state', a
     return window.__THREE_GAME_DIAGNOSTICS__!.physics.tracers;
   });
   expect(expired).toBe(0);
+});
+
+test('enemy sound cues wave in front, point behind, and never reveal enemies on radar', async ({ page }, testInfo) => {
+  await page.goto('/?qa=1&debug=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await advanceToLive(page);
+  const cueStates = await page.evaluate(() => {
+    const qa = window.__THREE_GAME_QA__!;
+    qa.place('attack-human', { x: 0, y: 1, z: 0 });
+    qa.place('defense-bot-1', { x: 0, y: 1, z: 8 });
+    qa.command('defense-bot-1', { fire: true, slot: 1, yaw: Math.PI, pitch: 0 });
+    qa.advance(1);
+    const behind = {
+      cues: qa.state.soundCues,
+      path: document.querySelector('.hud__sound-wave')?.getAttribute('d'),
+      arrowHidden: (document.querySelector('.hud__sound-arrow') as HTMLElement).hidden,
+      radarTeams: qa.state.radar.contacts.map(({ team }) => team),
+    };
+
+    qa.command('defense-bot-1', { fire: false, slot: 1 });
+    qa.advance(8);
+    qa.place('defense-bot-1', { x: 8, y: 1, z: -8 });
+    qa.command('defense-bot-1', { fire: true, slot: 1, yaw: 2.35, pitch: 0 });
+    qa.advance(1);
+    return {
+      behind,
+      front: {
+        cues: qa.state.soundCues,
+        path: document.querySelector('.hud__sound-wave')?.getAttribute('d'),
+        arrowHidden: (document.querySelector('.hud__sound-arrow') as HTMLElement).hidden,
+      },
+    };
+  });
+
+  expect(cueStates.behind.cues.some(({ behind }) => behind)).toBe(true);
+  expect(cueStates.behind.arrowHidden).toBe(false);
+  expect(cueStates.behind.radarTeams).toEqual(['attack', 'attack', 'attack']);
+  expect(cueStates.front.cues.some(({ behind }) => !behind)).toBe(true);
+  expect(cueStates.front.arrowHidden).toBe(true);
+  expect(cueStates.front.path).not.toBe(cueStates.behind.path);
+  await expect(page.locator('.hud__radar-contact--defense')).toHaveCount(0);
+  await page.locator('.mission-modal').evaluate((element) => element.remove());
+  await page.screenshot({ path: testInfo.outputPath('sound-direction-and-sky-1440x900.png') });
+  const renderer = await page.evaluate(() => ({
+    ...window.__THREE_GAME_DIAGNOSTICS__?.renderer,
+  }));
+  expect(renderer.calls).toBeGreaterThan(0);
+  expect(renderer.triangles).toBeGreaterThan(0);
+  expect(renderer.textures).toBeGreaterThanOrEqual(6);
+  await testInfo.attach('renderer-diagnostics.json', {
+    body: JSON.stringify(renderer, null, 2),
+    contentType: 'application/json',
+  });
+});
+
+test('new sound line and radar remain inside a narrow viewport', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?qa=1');
+  await page.waitForFunction(() => Boolean(window.__THREE_GAME_QA__));
+  await page.locator('.mission-modal').evaluate((element) => element.remove());
+  const boxes = await page.evaluate(() => {
+    const selectors = [
+      '.hud__sound-direction',
+      '.hud__radar',
+      '.hud__round',
+      '.hud__vitals',
+      '.hud__weapon',
+    ];
+    return selectors.map((selector) => {
+      const rect = document.querySelector(selector)!.getBoundingClientRect();
+      return { selector, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    });
+  });
+  for (const box of boxes) {
+    expect(box.left, box.selector).toBeGreaterThanOrEqual(0);
+    expect(box.right, box.selector).toBeLessThanOrEqual(390);
+    expect(box.top, box.selector).toBeGreaterThanOrEqual(0);
+    expect(box.bottom, box.selector).toBeLessThanOrEqual(844);
+  }
+  const vitals = boxes.find(({ selector }) => selector === '.hud__vitals')!;
+  const weapon = boxes.find(({ selector }) => selector === '.hud__weapon')!;
+  expect(vitals.right).toBeLessThanOrEqual(weapon.left);
+  await page.screenshot({ path: testInfo.outputPath('hud-mobile-390x844.png') });
 });
 
 test('bots empty their real magazine and wait for the full reload timer', async ({ page }) => {

@@ -167,7 +167,12 @@ it('deep-clones radar state so diagnostics cannot mutate the authoritative snaps
     phase: 'live', phaseRemaining: 90, health: 100, armor: 25,
     weaponName: 'Vanguard Rifle', magazine: 30, reserve: 90,
     bombState: 'carried', round: 1, paused: false,
+    soundCues: [{
+      id: 'defense-bot-1', direction: -0.4, intensity: 0.8,
+      behind: false, arrowAngle: -24, phase: 0.5,
+    }],
     radar: {
+      viewerTeam: 'attack',
       bounds: { minX: -17, maxX: 17, minZ: -47, maxZ: 47 },
       bombSite: { x: -1, z: -29 },
       contacts: [{
@@ -185,10 +190,12 @@ it('deep-clones radar state so diagnostics cannot mutate the authoritative snaps
   copy.radar.bounds.minX = 99;
   copy.radar.bombSite.x = 99;
   copy.radar.contacts[0]!.x = 99;
+  copy.soundCues[0]!.intensity = 0;
   copy.actors[0]!.position.x = 99;
 
   expect(source.radar.bounds.minX).toBe(-17);
   expect(source.radar.bombSite.x).toBe(-1);
   expect(source.radar.contacts[0]!.x).toBe(0);
+  expect(source.soundCues[0]!.intensity).toBe(0.8);
   expect(source.actors[0]!.position.x).toBe(0);
 });

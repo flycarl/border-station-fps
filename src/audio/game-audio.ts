@@ -69,24 +69,25 @@ export class GameAudio {
     alive: boolean,
     grounded: boolean,
     listener: Vec3,
-  ): void {
+  ): boolean {
     const previous = this.footsteps.get(actorId);
     if (!previous) {
       this.footsteps.set(actorId, { position: { ...position }, distance: 0 });
-      return;
+      return false;
     }
 
     const travelled = planarDistance(previous.position, position);
     previous.position = { ...position };
     if (!alive || !grounded || travelled > 2.5) {
       previous.distance = 0;
-      return;
+      return false;
     }
 
     previous.distance += travelled;
-    if (previous.distance < this.strideDistance) return;
+    if (previous.distance < this.strideDistance) return false;
     previous.distance %= this.strideDistance;
     this.emit('footstep', distanceBetween(position, listener));
+    return true;
   }
 
   playWeaponEvents(events: WeaponEvent[], listener: Vec3, shooterPosition: Vec3): void {
@@ -189,8 +190,22 @@ class WebAudioBackend implements GameAudioBackend {
 
   private playFootstep(context: AudioContext, output: AudioNode, attenuation: number): void {
     const now = context.currentTime;
-    this.noiseBurst(context, output, now, 0.1, 1_250, 0.1 * attenuation);
-    this.tone(context, output, now, 0.08, 105, 68, 'sine', 0.07 * attenuation);
+    this.filteredNoise(
+      context,
+      output,
+      now,
+      0.18,
+      1_450 + Math.random() * 420,
+      0.052 * attenuation,
+    );
+    this.filteredNoise(
+      context,
+      output,
+      now + 0.025,
+      0.14,
+      3_100 + Math.random() * 650,
+      0.025 * attenuation,
+    );
   }
 
   private playGunshot(context: AudioContext, output: AudioNode, attenuation: number): void {
@@ -230,6 +245,33 @@ class WebAudioBackend implements GameAudioBackend {
     gain.gain.setValueAtTime(Math.max(0.0001, volume), start);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     source.connect(filter).connect(gain).connect(output);
+    this.track(source);
+    source.start(start);
+    source.stop(start + duration);
+  }
+
+  private filteredNoise(
+    context: AudioContext,
+    output: AudioNode,
+    start: number,
+    duration: number,
+    frequency: number,
+    volume: number,
+  ): void {
+    if (!this.noise) return;
+    const source = context.createBufferSource();
+    const highpass = context.createBiquadFilter();
+    const lowpass = context.createBiquadFilter();
+    const gain = context.createGain();
+    source.buffer = this.noise;
+    highpass.type = 'highpass';
+    highpass.frequency.setValueAtTime(520, start);
+    lowpass.type = 'lowpass';
+    lowpass.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), start + 0.035);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    source.connect(highpass).connect(lowpass).connect(gain).connect(output);
     this.track(source);
     source.start(start);
     source.stop(start + duration);

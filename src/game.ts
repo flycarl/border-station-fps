@@ -2,6 +2,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { BotSquad } from './ai/bot-squad';
 import { NavGraph } from './ai/nav-graph';
 import { GameAudio, type GameAudioDiagnostics } from './audio/game-audio';
+import { SoundAwarenessSystem } from './audio/sound-awareness';
 import { FixedStepClock } from './core/fixed-step';
 import {
   idleCommand,
@@ -194,10 +195,12 @@ export function cloneGameSnapshot(snapshot: GameSnapshot): GameSnapshot {
   return {
     ...snapshot,
     radar: {
+      viewerTeam: snapshot.radar.viewerTeam,
       bounds: { ...snapshot.radar.bounds },
       bombSite: { ...snapshot.radar.bombSite },
       contacts: snapshot.radar.contacts.map((contact) => ({ ...contact })),
     },
+    soundCues: snapshot.soundCues.map((cue) => ({ ...cue })),
     actors: snapshot.actors.map((actor) => ({
       ...actor,
       position: { ...actor.position },
@@ -271,6 +274,7 @@ export class Game {
   private readonly hud: Hud;
   private readonly startScreen: StartScreen;
   private readonly audio = new GameAudio();
+  private readonly soundAwareness = new SoundAwarenessSystem();
   private readonly roster = createGameRoster();
   private readonly map = createBorderStationGraybox();
   private readonly nav: NavGraph;
@@ -389,6 +393,7 @@ export class Game {
   };
 
   private readonly fixedUpdate = (dt: number): void => {
+    this.soundAwareness.update(dt);
     this.updatePerception();
     this.sampleCommands(dt);
     this.updateMovement(dt);
@@ -484,6 +489,15 @@ export class Game {
         this.audioListenerPosition(),
         actor.state.position,
       );
+      if (actor.state.team !== 'attack' && events.some(({ type }) => type === 'shot')) {
+        this.soundAwareness.emit({
+          sourceId: actor.state.id,
+          position: actor.state.position,
+          strength: 1,
+          lifetime: 1.15,
+          maxDistance: 48,
+        });
+      }
       const shot = events.find((event) => event.type === 'shot');
       if (shot) {
         this.world.spawnBulletTracer(
@@ -581,6 +595,7 @@ export class Game {
     this.weaponSystem = this.createWeaponSystem();
     this.humanWeaponFired = false;
     this.audio.resetRound();
+    this.soundAwareness.reset();
     this.botSquad.reset(this.match.snapshot().round);
     this.spawnActors();
     if (this.hasEntered && document.pointerLockElement !== this.canvas) this.pause();
@@ -622,10 +637,16 @@ export class Game {
       magazine: selected?.magazine ?? 0,
       reserve: selected?.reserve ?? 0,
       bombState: bomb.state,
+      soundCues: human?.alive
+        ? this.soundAwareness.snapshot(human.position, human.yaw)
+        : [],
       radar: {
+        viewerTeam: human?.team ?? 'attack',
         bounds: radarBounds,
         bombSite: { x: this.map.bombSite.center.x, z: this.map.bombSite.center.z },
-        contacts: actorStates.map(({ definition, state }) => ({
+        contacts: actorStates
+          .filter(({ state }) => state.team === (human?.team ?? 'attack'))
+          .map(({ definition, state }) => ({
           id: state.id,
           team: state.team,
           x: state.position.x,
@@ -633,7 +654,7 @@ export class Game {
           yaw: state.yaw,
           human: definition.human,
           alive: state.alive,
-        })),
+          })),
       },
       round: match.round,
       paused: this.paused,
@@ -704,13 +725,22 @@ export class Game {
   private updateFootstepAudio(): void {
     const listener = this.audioListenerPosition();
     for (const { state } of this.actors.values()) {
-      this.audio.updateFootstep(
+      const stepped = this.audio.updateFootstep(
         state.id,
         state.position,
         state.alive,
         state.grounded,
         listener,
       );
+      if (stepped && state.team !== 'attack') {
+        this.soundAwareness.emit({
+          sourceId: state.id,
+          position: state.position,
+          strength: 0.72,
+          lifetime: 0.78,
+          maxDistance: 18,
+        });
+      }
     }
   }
 

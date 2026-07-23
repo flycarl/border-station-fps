@@ -12,6 +12,16 @@ export interface HudSnapshot {
   reserve: number;
   bombState: string;
   radar: RadarSnapshot;
+  soundCues: SoundDirectionCue[];
+}
+
+export interface SoundDirectionCue {
+  id: string;
+  direction: number;
+  intensity: number;
+  behind: boolean;
+  arrowAngle: number;
+  phase: number;
 }
 
 export interface RadarBounds {
@@ -32,9 +42,33 @@ export interface RadarContact {
 }
 
 export interface RadarSnapshot {
+  viewerTeam: 'attack' | 'defense';
   bounds: RadarBounds;
   bombSite: { x: number; z: number };
   contacts: RadarContact[];
+}
+
+export function buildSoundWavePath(
+  cues: readonly SoundDirectionCue[],
+  width = 360,
+  height = 42,
+): string {
+  const centerY = height / 2;
+  const frontCues = cues.filter(({ behind }) => !behind);
+  const points: string[] = [];
+  for (let index = 0; index <= 72; index++) {
+    const x = width * index / 72;
+    let offset = 0;
+    for (const cue of frontCues) {
+      const centerX = (Math.max(-1, Math.min(1, cue.direction)) + 1) * width / 2;
+      const spread = width * 0.085;
+      const delta = x - centerX;
+      const envelope = Math.exp(-(delta * delta) / (2 * spread * spread));
+      offset += Math.sin(delta * 0.19 + cue.phase) * envelope * cue.intensity * height * 0.34;
+    }
+    points.push(`${x.toFixed(1)},${(centerY + offset).toFixed(1)}`);
+  }
+  return `M ${points.join(' L ')}`;
 }
 
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
@@ -93,6 +127,8 @@ export class Hud {
   private readonly radarPlot: HTMLElement;
   private readonly radarSite: HTMLElement;
   private readonly radarContacts = new Map<string, HTMLElement>();
+  private readonly soundWave: SVGPathElement;
+  private readonly soundArrow: HTMLElement;
   private lastStatusKey = '';
 
   constructor(private readonly root: HTMLElement) {
@@ -111,7 +147,14 @@ export class Hud {
         <div class="hud__radar-plot">
           <span class="hud__radar-site" title="爆破点 A">A</span>
         </div>
-        <div class="hud__radar-legend"><span>● 攻方</span><span>● 守方</span></div>
+        <div class="hud__radar-legend"><span>● 友军</span><span>敌方隐藏</span></div>
+      </section>
+      <section class="hud__sound-direction" aria-label="敌方声音方位">
+        <svg viewBox="0 0 360 42" preserveAspectRatio="none" aria-hidden="true">
+          <path class="hud__sound-baseline" d="M 0,21 L 360,21"></path>
+          <path class="hud__sound-wave" d="M 0,21 L 360,21"></path>
+        </svg>
+        <span class="hud__sound-arrow" aria-hidden="true">▲</span>
       </section>
       <section class="hud__vitals" aria-label="生命状态">
         <span class="hud__label">生命</span>
@@ -141,6 +184,10 @@ export class Hud {
     this.announcer = this.require('.hud__announcer');
     this.radarPlot = this.require('.hud__radar-plot');
     this.radarSite = this.require('.hud__radar-site');
+    const soundWave = this.element.querySelector<SVGPathElement>('.hud__sound-wave');
+    if (!soundWave) throw new Error('HUD element missing: .hud__sound-wave');
+    this.soundWave = soundWave;
+    this.soundArrow = this.require('.hud__sound-arrow');
     root.append(this.element);
   }
 
@@ -158,6 +205,7 @@ export class Hud {
     this.objective.textContent = objectivePrompt(snapshot);
     this.objective.hidden = this.objective.textContent === '';
     this.renderRadar(snapshot.radar);
+    this.renderSoundDirection(snapshot.soundCues);
     const statusKey = `${snapshot.phase}:${snapshot.bombState}`;
     if (statusKey !== this.lastStatusKey) {
       this.lastStatusKey = statusKey;
@@ -178,6 +226,7 @@ export class Hud {
 
     const livingIds = new Set<string>();
     for (const contact of radar.contacts) {
+      if (contact.team !== radar.viewerTeam) continue;
       if (!contact.alive) continue;
       livingIds.add(contact.id);
       let marker = this.radarContacts.get(contact.id);
@@ -200,6 +249,20 @@ export class Hud {
       if (livingIds.has(id)) continue;
       marker.remove();
       this.radarContacts.delete(id);
+    }
+  }
+
+  private renderSoundDirection(cues: readonly SoundDirectionCue[]): void {
+    this.soundWave.setAttribute('d', buildSoundWavePath(cues));
+    const frontIntensity = cues
+      .filter(({ behind }) => !behind)
+      .reduce((maximum, cue) => Math.max(maximum, cue.intensity), 0);
+    this.soundWave.style.opacity = String(Math.max(0.14, frontIntensity));
+    const behind = cues.find((cue) => cue.behind);
+    this.soundArrow.hidden = behind === undefined;
+    if (behind) {
+      this.soundArrow.style.setProperty('--sound-angle', `${behind.arrowAngle}deg`);
+      this.soundArrow.style.opacity = String(Math.max(0.35, behind.intensity));
     }
   }
 

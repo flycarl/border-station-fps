@@ -224,6 +224,7 @@ export class WorldRuntime {
   private readonly colliderEntityIds = new Map<number, string>();
   private readonly disposableGeometries: THREE.BufferGeometry[] = [];
   private readonly disposableMaterials: THREE.Material[] = [];
+  private readonly disposableTextures: THREE.Texture[] = [];
   private readonly playerBodies = new Map<EntityId, RAPIER.RigidBody>();
   private readonly inactivePlayers = new Set<EntityId>();
   private readonly playerMeshes = new Map<EntityId, PixelCharacter>();
@@ -253,9 +254,14 @@ export class WorldRuntime {
       preserveDrawingBuffer: true,
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_DEVICE_PIXEL_RATIO));
-    renderer.setClearColor(0x172733);
+    renderer.setClearColor(0x77c9f2);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
 
     const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x77c9f2);
+    scene.fog = new THREE.Fog(0x96d5f2, 105, 230);
     const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 300);
     camera.rotation.order = 'YXZ';
     const physicsWorld = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -266,6 +272,7 @@ export class WorldRuntime {
     scene.add(camera);
 
     runtime.buildGraybox();
+    runtime.addEnvironmentArt();
     runtime.addLighting();
     runtime.resize();
     window.addEventListener('resize', runtime.resize);
@@ -506,6 +513,7 @@ export class WorldRuntime {
     for (const entityId of [...this.playerBodies.keys()]) this.removePlayer(entityId);
     for (const geometry of this.disposableGeometries) geometry.dispose();
     for (const material of this.disposableMaterials) material.dispose();
+    for (const texture of this.disposableTextures) texture.dispose();
     this.firstPersonWeapon?.dispose();
     this.firstPersonWeapon = null;
     this.bulletTracers.dispose();
@@ -603,9 +611,144 @@ export class WorldRuntime {
 
   private addLighting(): void {
     if (!this.scene) return;
-    this.scene.add(new THREE.HemisphereLight(0xbfd9e8, 0x8b6b42, 2.2));
-    const sun = new THREE.DirectionalLight(0xfff1d0, 2.6);
-    sun.position.set(8, 18, 12);
+    this.scene.add(new THREE.HemisphereLight(0xdaf5ff, 0x80654b, 2.35));
+    const sun = new THREE.DirectionalLight(0xfff0c2, 3);
+    sun.position.set(28, 34, 18);
     this.scene.add(sun);
+  }
+
+  private addEnvironmentArt(): void {
+    if (!this.scene) return;
+    this.addSkyArt();
+    this.addGraffitiArt();
+  }
+
+  private addSkyArt(): void {
+    if (!this.scene) return;
+    const sunGeometry = new THREE.SphereGeometry(5.8, 18, 12);
+    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffe584, fog: false });
+    const sunDisc = new THREE.Mesh(sunGeometry, sunMaterial);
+    sunDisc.name = 'sky-sun';
+    sunDisc.position.set(48, 42, -122);
+    this.scene.add(sunDisc);
+    this.disposableGeometries.push(sunGeometry);
+    this.disposableMaterials.push(sunMaterial);
+
+    const cloudGeometry = new THREE.IcosahedronGeometry(1, 1);
+    const cloudMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.92,
+      fog: false,
+    });
+    const cloudShadowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xd8eef7,
+      transparent: true,
+      opacity: 0.78,
+      fog: false,
+    });
+    const cloudPlans = [
+      { x: -42, y: 24, z: -96, scale: 1.2 },
+      { x: 10, y: 31, z: -145, scale: 1.45 },
+      { x: 54, y: 20, z: -88, scale: 1.05 },
+      { x: -58, y: 27, z: 105, scale: 1.3 },
+    ];
+    for (const [cloudIndex, plan] of cloudPlans.entries()) {
+      const cloud = new THREE.Group();
+      cloud.name = `sky-cloud-${cloudIndex + 1}`;
+      for (const [partIndex, part] of ([
+        { x: -3.2, y: 0, scale: [3.9, 1.35, 1.3] },
+        { x: 0, y: 0.7, scale: [4.8, 2.05, 1.55] },
+        { x: 3.7, y: -0.05, scale: [3.5, 1.25, 1.2] },
+        { x: 0.9, y: -0.72, scale: [5.4, 0.85, 1.35] },
+      ] as const).entries()) {
+        const puff = new THREE.Mesh(
+          cloudGeometry,
+          partIndex === 3 ? cloudShadowMaterial : cloudMaterial,
+        );
+        puff.position.set(part.x, part.y, partIndex === 3 ? 0.25 : 0);
+        puff.scale.set(part.scale[0], part.scale[1], part.scale[2]);
+        cloud.add(puff);
+      }
+      cloud.position.set(plan.x, plan.y, plan.z);
+      cloud.scale.setScalar(plan.scale);
+      this.scene.add(cloud);
+    }
+    this.disposableGeometries.push(cloudGeometry);
+    this.disposableMaterials.push(cloudMaterial, cloudShadowMaterial);
+  }
+
+  private addGraffitiArt(): void {
+    if (!this.scene) return;
+    const panels = [
+      { x: -16.47, y: 2.45, z: 19, rotationY: Math.PI / 2, label: 'BORDER', colors: ['#ffcf4a', '#ff4f79'] },
+      { x: -16.47, y: 2.35, z: -16, rotationY: Math.PI / 2, label: 'A  ←', colors: ['#4ff1d0', '#ffe266'] },
+      { x: 16.47, y: 2.45, z: 8, rotationY: -Math.PI / 2, label: 'NO FEAR', colors: ['#69d7ff', '#ff6d3d'] },
+      { x: 16.47, y: 2.35, z: -25, rotationY: -Math.PI / 2, label: 'RUSH', colors: ['#ff75d8', '#75ff79'] },
+      { x: -7.2, y: 2.4, z: -46.47, rotationY: 0, label: 'STATION', colors: ['#ffd75f', '#70d9ff'] },
+      { x: 7.5, y: 2.35, z: 46.47, rotationY: Math.PI, label: 'GO!', colors: ['#ff5b5b', '#ffe781'] },
+    ] as const;
+    const geometry = new THREE.PlaneGeometry(7.8, 3.35);
+    this.disposableGeometries.push(geometry);
+    for (const [index, panel] of panels.entries()) {
+      const texture = this.createGraffitiTexture(panel.label, panel.colors[0], panel.colors[1]);
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = `wall-graffiti-${index + 1}`;
+      mesh.position.set(panel.x, panel.y, panel.z);
+      mesh.rotation.y = panel.rotationY;
+      mesh.renderOrder = 2;
+      this.scene.add(mesh);
+      this.disposableTextures.push(texture);
+      this.disposableMaterials.push(material);
+    }
+  }
+
+  private createGraffitiTexture(label: string, primary: string, secondary: string): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 256;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Unable to create graffiti canvas');
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.globalAlpha = 0.88;
+    context.fillStyle = 'rgba(14, 24, 30, 0.42)';
+    context.fillRect(10, 35, 492, 185);
+    context.globalAlpha = 1;
+    context.strokeStyle = secondary;
+    context.lineWidth = 20;
+    context.lineCap = 'round';
+    context.beginPath();
+    context.moveTo(35, 198);
+    context.bezierCurveTo(138, 80, 338, 244, 476, 74);
+    context.stroke();
+    context.strokeStyle = 'rgba(255,255,255,0.82)';
+    context.lineWidth = 13;
+    context.font = '900 72px Arial Black, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.strokeText(label, 256, 130);
+    context.fillStyle = primary;
+    context.fillText(label, 256, 130);
+    context.fillStyle = secondary;
+    for (const [x, y, radius] of ([
+      [44, 54, 9], [86, 219, 6], [438, 205, 8], [474, 42, 5], [386, 61, 4],
+    ] as const)) {
+      context.beginPath();
+      context.arc(x, y, radius, 0, Math.PI * 2);
+      context.fill();
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = Math.min(4, this.renderer?.capabilities.getMaxAnisotropy() ?? 1);
+    texture.needsUpdate = true;
+    return texture;
   }
 }

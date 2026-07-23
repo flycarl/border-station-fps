@@ -347,7 +347,9 @@ export class BotSquad {
       return context.nav.nodes.find(({ id }) => id === anchorId)?.position
         ?? site.position;
     }
-    const routeCheckpoint = this.attackRouteCheckpoint(bot, actor, context.nav);
+    const routeCheckpoint = objective === 'advance'
+      ? this.attackRouteCheckpoint(bot, actor, context.nav)
+      : null;
     if (routeCheckpoint) {
       return routeCheckpoint;
     }

@@ -1,7 +1,13 @@
 import { expect, it } from 'vitest';
-import { Hud, projectRadarPosition, type HudSnapshot } from '../../src/ui/hud';
+import {
+  buildSoundWavePath,
+  Hud,
+  projectRadarPosition,
+  type HudSnapshot,
+} from '../../src/ui/hud';
 
 const radar: HudSnapshot['radar'] = {
+  viewerTeam: 'attack',
   bounds: { minX: -17, maxX: 17, minZ: -47, maxZ: 47 },
   bombSite: { x: -1, z: -29 },
   contacts: [
@@ -25,6 +31,7 @@ const snapshot = (overrides: Partial<HudSnapshot> = {}): HudSnapshot => ({
   magazine: 21,
   reserve: 73,
   bombState: 'carried',
+  soundCues: [],
   radar,
   ...overrides,
 });
@@ -51,17 +58,48 @@ it('renders both team survivor counts around the round clock', () => {
   expect(root.querySelector('[data-testid="defenders-alive"]')?.textContent).toBe('守方 1');
 });
 
-it('renders the bomb site and only living radar contacts', () => {
+it('renders the bomb site and only living friendly radar contacts', () => {
   const root = document.createElement('div');
   const hud = new Hud(root);
 
   hud.render(snapshot());
 
-  expect(root.querySelectorAll('.hud__radar-contact')).toHaveLength(3);
+  expect(root.querySelectorAll('.hud__radar-contact')).toHaveLength(2);
   expect(root.querySelectorAll('.hud__radar-contact--attack')).toHaveLength(2);
-  expect(root.querySelectorAll('.hud__radar-contact--defense')).toHaveLength(1);
+  expect(root.querySelectorAll('.hud__radar-contact--defense')).toHaveLength(0);
   expect(root.querySelector('.hud__radar-contact--human')).not.toBeNull();
   expect(root.querySelector('.hud__radar-site')).not.toBeNull();
+});
+
+it('waves toward front sounds and points toward sounds behind the player', () => {
+  const root = document.createElement('div');
+  const hud = new Hud(root);
+  const front = {
+    id: 'enemy-front',
+    direction: 0.65,
+    intensity: 0.9,
+    behind: false,
+    arrowAngle: 0,
+    phase: 0.7,
+  };
+  hud.render(snapshot({ soundCues: [front] }));
+
+  const path = root.querySelector('.hud__sound-wave')?.getAttribute('d');
+  expect(path).toBe(buildSoundWavePath([front]));
+  expect(path).not.toBe(buildSoundWavePath([]));
+  expect(root.querySelector<HTMLElement>('.hud__sound-arrow')?.hidden).toBe(true);
+
+  hud.render(snapshot({
+    soundCues: [{
+      ...front,
+      id: 'enemy-behind',
+      behind: true,
+      arrowAngle: 135,
+    }],
+  }));
+  const arrow = root.querySelector<HTMLElement>('.hud__sound-arrow');
+  expect(arrow?.hidden).toBe(false);
+  expect(arrow?.style.getPropertyValue('--sound-angle')).toBe('135deg');
 });
 
 it('projects and clamps world coordinates into a north-up radar', () => {

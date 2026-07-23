@@ -66,7 +66,46 @@ button { pointer-events: auto; font: inherit; }
 .hud__radar-contact--human { width: 11px; height: 14px; border: 0; border-radius: 0; background: #fff3ce; clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%); }
 .hud__radar-legend { margin: 7px 2px 0; letter-spacing: .02em; }
 .hud__radar-legend span:first-child { color: var(--attack); }
-.hud__radar-legend span:last-child { color: var(--defense); }
+.hud__radar-legend span:last-child { color: #7f9193; }
+.hud__sound-direction {
+  position: absolute;
+  top: clamp(112px, 17vh, 176px);
+  left: 50%;
+  width: clamp(240px, 32vw, 420px);
+  height: 50px;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 80%));
+}
+.hud__sound-direction svg { display: block; width: 100%; height: 42px; overflow: visible; }
+.hud__sound-baseline {
+  fill: none;
+  stroke: rgb(225 239 235 / 26%);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 6;
+}
+.hud__sound-wave {
+  fill: none;
+  stroke: #f5d28e;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: opacity 90ms linear;
+}
+.hud__sound-arrow {
+  position: absolute;
+  left: calc(50% - 12px);
+  top: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: #ffc561;
+  font-size: 17px;
+  transform: rotate(var(--sound-angle, 0deg)) translateY(-24px);
+  transform-origin: 50% 50%;
+  text-shadow: 0 0 8px rgb(255 172 57 / 80%);
+}
+.hud__sound-arrow[hidden] { display: none; }
 .hud__vitals, .hud__weapon {
   position: absolute; bottom: clamp(24px, 4vh, 42px); min-width: 230px; padding: 11px 15px;
   background: linear-gradient(90deg, var(--panel), rgb(8 18 22 / 38%));
@@ -123,5 +162,17 @@ button { pointer-events: auto; font: inherit; }
   .hud__vitals, .hud__weapon { min-width: 185px; }
   .hud__round { top: 12px; }
   .hud__radar { top: 100px; right: 12px; width: 142px; }
+  .hud__sound-direction { top: 94px; width: min(260px, 62vw); }
+}
+@media (max-width: 520px) {
+  .hud__vitals, .hud__weapon {
+    bottom: max(18px, env(safe-area-inset-bottom));
+    min-width: 168px;
+    padding: 9px 10px;
+  }
+  .hud__vitals { left: 10px; grid-template-columns: auto 44px; gap: 3px 7px; }
+  .hud__weapon { right: 10px; }
+  .hud__health { font-size: 24px; }
+  .hud__ammo { min-width: 116px; font-size: 25px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
