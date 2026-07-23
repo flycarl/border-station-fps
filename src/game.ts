@@ -1,6 +1,7 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { BotSquad } from './ai/bot-squad';
 import { NavGraph } from './ai/nav-graph';
+import { GameAudio, type GameAudioDiagnostics } from './audio/game-audio';
 import { FixedStepClock } from './core/fixed-step';
 import {
   idleCommand,
@@ -208,6 +209,7 @@ interface GameDiagnostics {
   readonly renderer: WorldDiagnostics['renderer'];
   readonly physics: Omit<WorldDiagnostics, 'renderer'>;
   readonly viewWeapon: ReturnType<WorldRuntime['firstPersonWeaponDiagnostics']>;
+  readonly audio: GameAudioDiagnostics;
   readonly state: GameSnapshot;
   readonly loop: {
     active: boolean;
@@ -268,6 +270,7 @@ export class Game {
   private readonly input: KeyboardMouseInput;
   private readonly hud: Hud;
   private readonly startScreen: StartScreen;
+  private readonly audio = new GameAudio();
   private readonly roster = createGameRoster();
   private readonly map = createBorderStationGraybox();
   private readonly nav: NavGraph;
@@ -304,6 +307,7 @@ export class Game {
       this.resumeFromGesture,
       this.restartFromGesture,
     );
+    this.audio.setPaused(true);
     document.addEventListener('pointerlockchange', this.pointerLockChange);
     document.addEventListener('keydown', this.keyDown);
     this.installDiagnostics();
@@ -329,6 +333,7 @@ export class Game {
     this.bomb = this.createBombForRound(this.match.snapshot().round);
     this.weaponSystem = this.createWeaponSystem();
     this.humanWeaponFired = false;
+    this.audio.resetRound();
     this.botSquad.reset(1);
     this.spawnActors();
     this.clock.reset();
@@ -351,6 +356,7 @@ export class Game {
     this.input.dispose();
     this.hud.dispose();
     this.startScreen.dispose();
+    this.audio.dispose();
     for (const id of this.actors.keys()) this.world.removePlayer(id);
     this.actors.clear();
     this.world.dispose();
@@ -388,6 +394,7 @@ export class Game {
     this.updateMovement(dt);
     this.world.step(dt);
     this.updatePerception();
+    this.updateFootstepAudio();
     this.updateWeapons(dt);
     this.updateFirstPersonWeapon(dt);
 
@@ -472,6 +479,11 @@ export class Game {
       const events = this.weaponSystem.update(actor.state.id, command, {
         origin: this.eyePosition(actor.state.position),
       }, dt);
+      this.audio.playWeaponEvents(
+        events,
+        this.audioListenerPosition(),
+        actor.state.position,
+      );
       const shot = events.find((event) => event.type === 'shot');
       if (shot) {
         this.world.spawnBulletTracer(
@@ -568,6 +580,7 @@ export class Game {
     this.bomb = this.createBombForRound(this.match.snapshot().round);
     this.weaponSystem = this.createWeaponSystem();
     this.humanWeaponFired = false;
+    this.audio.resetRound();
     this.botSquad.reset(this.match.snapshot().round);
     this.spawnActors();
     if (this.hasEntered && document.pointerLockElement !== this.canvas) this.pause();
@@ -677,11 +690,33 @@ export class Game {
     return { x: position.x, y: position.y + EYE_HEIGHT, z: position.z };
   }
 
+  private audioListenerPosition(): Vec3 {
+    const states = [...this.actors.values()].map(({ state }) => state);
+    const viewId = selectViewActor(states, 'attack-human') ?? 'attack-human';
+    return this.actors.get(viewId)?.state.position
+      ?? this.actors.get('attack-human')?.state.position
+      ?? { x: 0, y: 0, z: 0 };
+  }
+
+  private updateFootstepAudio(): void {
+    const listener = this.audioListenerPosition();
+    for (const { state } of this.actors.values()) {
+      this.audio.updateFootstep(
+        state.id,
+        state.position,
+        state.alive,
+        state.grounded,
+        listener,
+      );
+    }
+  }
+
   private readonly resumeFromGesture = (): void => {
     if (this.disposed) return;
     this.hasEntered = true;
     this.paused = true;
     this.startScreen.setLockError('');
+    void this.audio.unlock();
     try {
       void this.canvas.requestPointerLock().catch(() => {
         this.pause('无法锁定鼠标，请重试。');
@@ -699,6 +734,7 @@ export class Game {
   private readonly pointerLockChange = (): void => {
     if (document.pointerLockElement === this.canvas) {
       this.paused = false;
+      this.audio.setPaused(false);
       this.lastFrameTime = null;
       this.startScreen.setLockError('');
       this.startScreen.setPaused(false);
@@ -723,6 +759,7 @@ export class Game {
 
   private continueSpectating(): void {
     this.paused = false;
+    this.audio.setPaused(false);
     this.lastFrameTime = null;
     this.input.resetHeldState();
     this.startScreen.setPaused(false);
@@ -730,6 +767,7 @@ export class Game {
 
   private pause(message = ''): void {
     this.paused = true;
+    this.audio.setPaused(true);
     this.lastFrameTime = null;
     this.input.resetHeldState();
     this.startScreen.setPaused(true);
@@ -749,6 +787,9 @@ export class Game {
       },
       get viewWeapon() {
         return game.world.firstPersonWeaponDiagnostics();
+      },
+      get audio() {
+        return game.audio.diagnostics();
       },
       get state() {
         return game.snapshot();

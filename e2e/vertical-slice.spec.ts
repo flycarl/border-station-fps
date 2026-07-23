@@ -52,6 +52,8 @@ test('starts a nonblank match and exposes restart', async ({ page }, testInfo) =
   await expect(page.getByRole('button', { name: '开始任务' })).toBeVisible();
   await page.getByRole('button', { name: '开始任务' }).click();
   await expect.poll(() => page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.state.paused)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.audio.unlocked)).toBe(true);
+  expect(await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.audio.paused)).toBe(false);
   await expect(page.locator('[data-testid="score"]')).toContainText('0  —  0');
   await expect(page.locator('canvas')).toBeVisible();
   const pixels = await page.locator('canvas').evaluate((canvas) => {
@@ -72,6 +74,7 @@ test('starts a nonblank match and exposes restart', async ({ page }, testInfo) =
   }));
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: '重新开始' })).toBeVisible();
+  expect(await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.audio.paused)).toBe(true);
   await page.getByRole('button', { name: '重新开始' }).click();
   await expect.poll(async () => page.evaluate(() => (
     window.__THREE_GAME_DIAGNOSTICS__?.physics.bodies
